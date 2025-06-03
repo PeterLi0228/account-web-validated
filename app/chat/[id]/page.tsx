@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Send, Bot, User, BookOpen, Plus, Edit3, Eye, Lock, Settings2, LayoutList, ChevronDown, ChevronUp } from "lucide-react"
+import { Send, Bot, User, BookOpen, Plus, Edit3, Eye, Lock, Settings2, LayoutList } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import AppLayout from "../../components/AppLayout"
 import RecordConfirmModal from "../../components/RecordConfirmModal"
@@ -57,7 +57,6 @@ export default function ChatPage() {
   const [isAISending, setIsAISending] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [suggestedRecord, setSuggestedRecord] = useState<TransactionData | null>(null)
-  const [showTransactions, setShowTransactions] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -303,47 +302,6 @@ export default function ChatPage() {
             </p>
           )}
         </header>
-
-        {/* Toggle Transactions Button and Transaction List Area */}
-        {currentBill && currentBill.transactions && (
-          <div className="px-4 pt-3 pb-1 border-b bg-white">
-            <Button 
-              variant="ghost" 
-              className="w-full flex justify-between items-center text-sm text-gray-700 hover:bg-gray-100 py-2 px-3 rounded-md" 
-              onClick={() => setShowTransactions(!showTransactions)}
-            >
-              <span>账本明细 ({currentBill.transactions.length} 条)</span>
-              {showTransactions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </div>
-        )}
-
-        {showTransactions && currentBill && currentBill.transactions && currentBill.transactions.length > 0 && (
-          <ScrollArea className="h-[200px] bg-gray-50/50 p-4 border-b">
-            <div className="space-y-3">
-              {currentBill.transactions.map((tx: Transaction) => (
-                <div key={tx.id} className="p-3 bg-white rounded-lg shadow-sm border border-gray-200/80 text-sm">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-medium text-gray-800 truncate max-w-[180px]">{tx.item}</span>
-                    <span className={`font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {tx.type === 'income' ? '+' : '-'}¥{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 flex justify-between items-center">
-                    <span>{currentBill.categories.find(c => c.id === tx.category_id)?.name || '未分类'}</span>
-                    <span>{new Date(tx.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}</span>
-                  </div>
-                  {tx.note && <p className="text-xs text-gray-400 mt-1 truncate">备注: {tx.note}</p>}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        )}
-        {showTransactions && currentBill && (!currentBill.transactions || currentBill.transactions.length === 0) && (
-            <div className="text-center py-4 text-sm text-gray-400 bg-gray-50/50 border-b">
-                当前账本还没有任何交易记录。
-            </div>
-        )}
 
         <ScrollArea className="flex-1 p-4 pb-20" ref={messagesEndRef as any}>
           <div className="space-y-4">
