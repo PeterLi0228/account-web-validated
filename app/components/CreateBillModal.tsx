@@ -13,14 +13,13 @@ import { BookOpen, FileText, MessageSquare } from "lucide-react"
 interface CreateBillModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (billData: { name: string; description?: string }) => Promise<void>
+  onSubmit: (billData: { name: string }) => Promise<void>
   isSubmitting?: boolean
 }
 
 export default function CreateBillModal({ isOpen, onClose, onSubmit, isSubmitting = false }: CreateBillModalProps) {
   const [formData, setFormData] = useState({
-    name: "",
-    description: "",
+    name: ""
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,11 +27,10 @@ export default function CreateBillModal({ isOpen, onClose, onSubmit, isSubmittin
     if (!formData.name.trim() || isSubmitting) return
 
     await onSubmit({
-      name: formData.name.trim(),
-      description: formData.description.trim() || undefined
+      name: formData.name.trim()
     })
     
-    setFormData({ name: "", description: "" })
+    setFormData({ name: "" })
   }
 
   return (
@@ -57,21 +55,6 @@ export default function CreateBillModal({ isOpen, onClose, onSubmit, isSubmittin
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description" className="flex items-center">
-              <MessageSquare className="mr-2 h-4 w-4" />
-              账本描述（可选）
-            </Label>
-            <Textarea
-              id="description"
-              placeholder="描述这个账本的用途..."
-              rows={3}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               disabled={isSubmitting}
             />
           </div>

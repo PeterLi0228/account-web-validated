@@ -1,8 +1,9 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, type User } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import type { User } from '@supabase/supabase-js'
 
 interface AuthContextType {
   user: User | null
@@ -23,7 +24,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 获取初始会话
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user as User || null)
+      console.log('初始会话状态:', session?.user?.id || '未登录')
+      setUser(session?.user ?? null)
       setLoading(false)
     })
 
@@ -31,7 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user as User || null)
+      console.log('认证状态变化:', _event, session?.user?.id || '未登录')
+      setUser(session?.user ?? null)
       setLoading(false)
     })
 

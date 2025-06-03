@@ -13,7 +13,8 @@ import { useParams, useRouter } from "next/navigation"
 import AppLayout from "../../components/AppLayout"
 import { useAuth } from "@/contexts/AuthContext"
 import { useBills } from "@/contexts/BillContext"
-import type { Bill, Transaction, Category } from "@/types"
+import { supabase } from "@/lib/supabase"
+import type { Bill, Transaction, Category, AILog } from "@/types"
 
 interface Message {
   id: string
@@ -43,12 +44,47 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState("")
   const [isAISending, setIsAISending] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [suggestedRecord, setSuggestedRecord] = useState<TransactionData | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const billId = params.id as string
   const currentBill = bills.find(bill => bill.id === billId)
+
+  // 加载聊天历史
+  const loadChatHistory = useCallback(async () => {
+    if (!billId || !user) return
+
+    setIsLoadingHistory(true)
+    try {
+      const { data: aiLogs, error } = await supabase
+        .from('ai_logs')
+        .select('*')
+        .eq('bill_id', billId)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('加载聊天历史失败:', error.message || error)
+        return
+      }
+
+      if (aiLogs && aiLogs.length > 0) {
+        const historyMessages: Message[] = aiLogs.map((log: AILog) => ({
+          id: log.id,
+          type: log.role === 'user' ? 'user' : 'ai',
+          content: log.content,
+          timestamp: new Date(log.created_at)
+        }))
+
+        setMessages(historyMessages)
+      }
+    } catch (error) {
+      console.error('加载聊天历史异常:', error instanceof Error ? error.message : '未知错误')
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }, [billId, user])
 
   useEffect(() => {
     if (!user) {
@@ -59,7 +95,12 @@ export default function ChatPage() {
     if (billId && billId !== currentBillId) {
       setCurrentBillId(billId)
     }
-  }, [user, billId, currentBillId, setCurrentBillId, router])
+
+    // 加载聊天历史
+    if (billId && user) {
+      loadChatHistory()
+    }
+  }, [user, billId, currentBillId, setCurrentBillId, router, loadChatHistory])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -209,6 +250,10 @@ export default function ChatPage() {
         timestamp: new Date(),
       }
       setMessages((prev: Message[]) => [...prev, confirmMessage])
+
+      // 保存确认消息到数据库
+      const { saveAILog } = await import('@/lib/ai')
+      await saveAILog(currentBill.id, user!.id, 'assistant', "✅ 记录已成功添加到账本中！")
     }
   }
 
@@ -255,7 +300,13 @@ export default function ChatPage() {
 
         <ScrollArea className="flex-1 p-4 pb-20" ref={messagesEndRef as any}>
           <div className="max-w-3xl mx-auto space-y-4">
-            {messages.length === 0 && (
+            {isLoadingHistory && (
+              <div className="text-center py-4">
+                <p className="text-gray-500">加载聊天历史中...</p>
+              </div>
+            )}
+
+            {!isLoadingHistory && messages.length === 0 && (
               <Card className="bg-blue-50 border-blue-200">
                 <CardContent className="p-6 text-center">
                   <Bot className="h-12 w-12 text-blue-600 mx-auto mb-4" />

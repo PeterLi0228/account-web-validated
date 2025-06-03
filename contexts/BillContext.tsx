@@ -28,19 +28,29 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
   const currentBill = bills.find(bill => bill.id === currentBillId) || null
 
   const fetchBills = async () => {
-    if (!user) return
+    if (!user) {
+      console.log('fetchBills: 用户未登录')
+      return
+    }
     
+    console.log('fetchBills: 开始获取账本列表, 用户ID:', user.id)
     setIsLoading(true)
     try {
       // 获取用户拥有的账本
+      console.log('fetchBills: 查询用户拥有的账本...')
       const { data: ownedBills, error: ownedError } = await supabase
         .from('bills')
         .select('*')
         .eq('owner_id', user.id)
 
-      if (ownedError) throw ownedError
+      if (ownedError) {
+        console.error('fetchBills: 查询拥有的账本失败:', ownedError.message || ownedError)
+        throw ownedError
+      }
+      console.log('fetchBills: 拥有的账本:', ownedBills)
 
       // 获取用户参与的账本
+      console.log('fetchBills: 查询用户参与的账本...')
       const { data: memberBills, error: memberError } = await supabase
         .from('bill_members')
         .select(`
@@ -49,7 +59,11 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
         `)
         .eq('user_id', user.id)
 
-      if (memberError) throw memberError
+      if (memberError) {
+        console.error('fetchBills: 查询参与的账本失败:', memberError.message || memberError)
+        throw memberError
+      }
+      console.log('fetchBills: 参与的账本:', memberBills)
 
       // 合并账本数据
       const allBills: Bill[] = []
@@ -60,6 +74,10 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
           allBills.push({
             ...bill,
             permission: 'owner',
+            memberCount: 1,
+            createdAt: bill.created_at.split('T')[0],
+            isShared: false,
+            owner: user.user_metadata?.display_name || user.email || '未知用户',
             categories: [],
             transactions: []
           })
@@ -70,9 +88,14 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
       if (memberBills) {
         for (const member of memberBills) {
           if (member.bills) {
+            const memberBill = member.bills as any
             allBills.push({
-              ...member.bills as any,
+              ...memberBill,
               permission: member.permission,
+              memberCount: 1,
+              createdAt: memberBill.created_at.split('T')[0],
+              isShared: true,
+              owner: '其他用户',
               categories: [],
               transactions: []
             })
@@ -80,28 +103,40 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      console.log('fetchBills: 合并后的账本列表:', allBills)
+
       // 为每个账本获取分类和交易
       for (const bill of allBills) {
         // 获取分类
-        const { data: categories } = await supabase
+        const { data: categories, error: categoriesError } = await supabase
           .from('categories')
           .select('*')
           .eq('bill_id', bill.id)
 
+        if (categoriesError) {
+          console.error('获取分类失败:', categoriesError.message)
+        }
+
         // 获取交易
-        const { data: transactions } = await supabase
+        const { data: transactions, error: transactionsError } = await supabase
           .from('transactions')
           .select('*')
           .eq('bill_id', bill.id)
           .order('date', { ascending: false })
 
+        if (transactionsError) {
+          console.error('获取交易失败:', transactionsError.message)
+        }
+
         bill.categories = categories || []
         bill.transactions = transactions || []
       }
 
+      console.log('fetchBills: 最终账本列表:', allBills)
       setBills(allBills)
     } catch (error) {
-      console.error('获取账本失败:', error)
+      const errorMessage = error instanceof Error ? error.message : '获取账本失败'
+      console.error('fetchBills: 获取账本失败:', errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -111,17 +146,28 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
     if (!user) return { error: '用户未登录' }
 
     try {
+      console.log('开始创建账本:', { name, userId: user.id })
+      
+      // 使用正确的insert格式，不包含description字段
       const { data, error } = await supabase
         .from('bills')
-        .insert({
+        .insert([{
           owner_id: user.id,
-          name,
-          description
-        })
+          name: name
+        }])
         .select()
-        .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('创建账本失败:', error.message || error)
+        return { error: error.message || '创建账本失败' }
+      }
+
+      if (!data || data.length === 0) {
+        return { error: '创建账本失败：未返回数据' }
+      }
+
+      const newBill = data[0]
+      console.log('账本创建成功:', newBill)
 
       // 创建默认分类
       const defaultCategories = [
@@ -134,21 +180,30 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
         { name: '其他支出', type: 'expense' as const }
       ]
 
-      for (const category of defaultCategories) {
-        await supabase
-          .from('categories')
-          .insert({
-            bill_id: data.id,
-            user_id: user.id,
-            name: category.name,
-            type: category.type
-          })
+      console.log('开始创建默认分类...')
+      const categoryInserts = defaultCategories.map(category => ({
+        bill_id: newBill.id,
+        user_id: user.id,
+        name: category.name,
+        type: category.type
+      }))
+
+      const { error: categoryError } = await supabase
+        .from('categories')
+        .insert(categoryInserts)
+
+      if (categoryError) {
+        console.error('创建默认分类失败:', categoryError.message || categoryError)
       }
 
+      console.log('开始刷新账本列表...')
       await fetchBills()
+      console.log('账本创建流程完成')
       return {}
     } catch (error) {
-      return { error: '创建账本失败' }
+      const errorMessage = error instanceof Error ? error.message : '创建账本失败'
+      console.error('创建账本异常:', errorMessage)
+      return { error: errorMessage }
     }
   }
 
@@ -156,20 +211,26 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
     if (!user) return { error: '用户未登录' }
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('transactions')
-        .insert({
+        .insert([{
           ...transaction,
           bill_id: billId,
           user_id: user.id
-        })
+        }])
+        .select()
 
-      if (error) throw error
+      if (error) {
+        console.error('添加交易失败:', error.message || error)
+        return { error: error.message || '添加交易失败' }
+      }
 
       await fetchBills()
       return {}
     } catch (error) {
-      return { error: '添加交易失败' }
+      const errorMessage = error instanceof Error ? error.message : '添加交易失败'
+      console.error('添加交易异常:', errorMessage)
+      return { error: errorMessage }
     }
   }
 
@@ -177,21 +238,27 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
     if (!user) return { error: '用户未登录' }
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('categories')
-        .insert({
+        .insert([{
           bill_id: billId,
           user_id: user.id,
-          name,
-          type
-        })
+          name: name,
+          type: type
+        }])
+        .select()
 
-      if (error) throw error
+      if (error) {
+        console.error('创建分类失败:', error.message || error)
+        return { error: error.message || '创建分类失败' }
+      }
 
       await fetchBills()
       return {}
     } catch (error) {
-      return { error: '创建分类失败' }
+      const errorMessage = error instanceof Error ? error.message : '创建分类失败'
+      console.error('创建分类异常:', errorMessage)
+      return { error: errorMessage }
     }
   }
 

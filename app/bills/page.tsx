@@ -29,10 +29,8 @@ export default function BillsPage() {
     }
   }, [user, router])
 
-  const filteredBills = bills.filter(
-    (bill: Bill) =>
-      bill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (bill.description && bill.description.toLowerCase().includes(searchTerm.toLowerCase())),
+  const filteredBills = bills.filter(bill =>
+    bill.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const getPermissionIcon = (permission?: string) => {
@@ -231,9 +229,6 @@ export default function BillsPage() {
                       <CardTitle className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                         {bill.name}
                       </CardTitle>
-                      {bill.description && (
-                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{bill.description}</p>
-                      )}
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
