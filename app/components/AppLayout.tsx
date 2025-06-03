@@ -41,7 +41,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/", icon: Home, label: "首页" },
   { href: "/bills", icon: BookOpen, label: "账本管理" },
-  { href: "/chat/1", icon: Bot, label: "AI记账", badge: "智能" },
+  { href: "/chat", icon: Bot, label: "AI记账", badge: "智能" },
   { href: "/analytics", icon: BarChart3, label: "数据分析" },
   { href: "/export", icon: Download, label: "导出数据" },
 ]
