@@ -5,23 +5,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-
-interface Transaction {
-  id: string
-  type: "income" | "expense"
-  date: string
-  item: string
-  amount: number
-  person: string
-  note: string
-}
+import type { Transaction } from "@/types"
 
 interface TransactionTableProps {
   transactions: Transaction[]
-  type: "income" | "expense"
 }
 
-export default function TransactionTable({ transactions, type }: TransactionTableProps) {
+export default function TransactionTable({ transactions }: TransactionTableProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString("zh-CN", {
@@ -32,13 +22,13 @@ export default function TransactionTable({ transactions, type }: TransactionTabl
   }
 
   const formatAmount = (amount: number) => {
-    return `¥${amount.toLocaleString()}`
+    return `¥${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   if (transactions.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        <p>暂无{type === "income" ? "收入" : "支出"}记录</p>
+        <p>暂无交易记录</p>
         <p className="text-sm mt-1">点击上方按钮添加记录</p>
       </div>
     )
@@ -67,13 +57,13 @@ export default function TransactionTable({ transactions, type }: TransactionTabl
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                <span className={`font-bold ${type === "income" ? "text-green-600" : "text-red-600"}`}>
-                  {formatAmount(transaction.amount)}
+                <span className={`font-bold ${transaction.type === "income" ? "text-green-600" : "text-red-600"}`}>
+                  {transaction.type === "income" ? "+" : "-"}{formatAmount(transaction.amount)}
                 </span>
               </TableCell>
               <TableCell>
                 <Badge variant="secondary" className="text-xs">
-                  {transaction.person}
+                  {transaction.person || "未知"}
                 </Badge>
               </TableCell>
               <TableCell>

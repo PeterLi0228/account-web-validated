@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,28 +10,24 @@ import { BookOpen, Plus, MoreHorizontal, Edit3, Share2, Trash2, Users, Search, E
 import Link from "next/link"
 import AppLayout from "../components/AppLayout"
 import CreateBillModal from "../components/CreateBillModal"
-import EditBillModal from "../components/EditBillModal"
-import ShareBillModal from "../components/ShareBillModal"
-import ManageMembersModal from "../components/ManageMembersModal"
-import ManageCategoriesModal from "../components/ManageCategoriesModal"
 import { useBills } from "@/contexts/BillContext"
-import type { Bill, Category } from "@/types"
+import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
+import type { Bill } from "@/types"
 
 export default function BillsPage() {
-  const {
-    bills,
-    addBill,
-    deleteBill,
-    updateBillCategories,
-  } = useBills()
-
+  const { user } = useAuth()
+  const { bills, isLoading, createBill } = useBills()
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showShareModal, setShowShareModal] = useState(false)
-  const [showMembersModal, setShowMembersModal] = useState(false)
-  const [showCategoriesModal, setShowCategoriesModal] = useState(false)
-  const [selectedBill, setSelectedBill] = useState<Bill | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/login')
+    }
+  }, [user, router])
 
   const filteredBills = bills.filter(
     (bill: Bill) =>
@@ -39,7 +35,7 @@ export default function BillsPage() {
       (bill.description && bill.description.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
-  const getPermissionIcon = (permission: string) => {
+  const getPermissionIcon = (permission?: string) => {
     switch (permission) {
       case "owner":
         return <Crown className="h-3 w-3" />
@@ -54,7 +50,7 @@ export default function BillsPage() {
     }
   }
 
-  const getPermissionText = (permission: string) => {
+  const getPermissionText = (permission?: string) => {
     switch (permission) {
       case "owner":
         return "拥有者"
@@ -69,7 +65,7 @@ export default function BillsPage() {
     }
   }
 
-  const getPermissionColor = (permission: string) => {
+  const getPermissionColor = (permission?: string) => {
     switch (permission) {
       case "owner":
         return "bg-yellow-100 text-yellow-700"
@@ -84,48 +80,59 @@ export default function BillsPage() {
     }
   }
 
-  const handleCreateBill = (billData: { name: string; description: string }) => {
-    addBill(billData)
-    setShowCreateModal(false)
-  }
-
-  const handleEditBill = (billData: Partial<Omit<Bill, 'id' | 'categories' | 'transactions'>>) => {
-    if (selectedBill) {
-      console.log("Updating bill (via context if implemented):", selectedBill.id, billData)
+  const handleCreateBill = async (billData: { name: string; description?: string }) => {
+    setIsCreating(true)
+    const result = await createBill(billData.name, billData.description)
+    
+    if (!result.error) {
+      setShowCreateModal(false)
     }
-    setShowEditModal(false)
-    setSelectedBill(null)
+    
+    setIsCreating(false)
   }
 
-  const handleDeleteBillFromContext = (billId: string) => {
-    if (confirm("确定要删除这个账本吗？此操作不可恢复。")) {
-      deleteBill(billId)
-    }
+  if (!user) {
+    return null
   }
 
-  const handleUpdateBillCategoriesFromContext = (billId: string, updatedCategories: Category[]) => {
-    updateBillCategories(billId, updatedCategories)
-    setShowCategoriesModal(false)
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="h-full flex items-center justify-center">
+          <p className="text-gray-500">加载中...</p>
+        </div>
+      </AppLayout>
+    )
   }
 
-  const openEditModal = (bill: Bill) => {
-    setSelectedBill(bill)
-    setShowEditModal(true)
-  }
-
-  const openShareModal = (bill: Bill) => {
-    setSelectedBill(bill)
-    setShowShareModal(true)
-  }
-
-  const openMembersModal = (bill: Bill) => {
-    setSelectedBill(bill)
-    setShowMembersModal(true)
-  }
-
-  const openCategoriesModal = (bill: Bill) => {
-    setSelectedBill(bill)
-    setShowCategoriesModal(true)
+  // 如果是新用户且没有账本，显示欢迎界面
+  if (bills.length === 0) {
+    return (
+      <AppLayout>
+        <div className="h-full flex flex-col items-center justify-center p-4 text-center">
+          <BookOpen className="h-16 w-16 text-gray-400 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">创建您的第一个账本</h2>
+          <p className="text-gray-500 mb-6 max-w-md">
+            账本是您管理收支的基础。您可以为不同的用途创建不同的账本，比如个人账本、家庭账本等。
+          </p>
+          <Button 
+            onClick={() => setShowCreateModal(true)}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+            disabled={isCreating}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {isCreating ? "创建中..." : "创建第一个账本"}
+          </Button>
+          
+          <CreateBillModal
+            isOpen={showCreateModal}
+            onClose={() => setShowCreateModal(false)}
+            onSubmit={handleCreateBill}
+            isSubmitting={isCreating}
+          />
+        </div>
+      </AppLayout>
+    )
   }
 
   return (
@@ -145,6 +152,7 @@ export default function BillsPage() {
           <Button
             onClick={() => setShowCreateModal(true)}
             className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+            disabled={isCreating}
           >
             <Plus className="mr-2 h-4 w-4" />
             创建账本
@@ -182,9 +190,9 @@ export default function BillsPage() {
             <CardContent className="p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-purple-700 mb-1">共享账本</p>
+                  <p className="text-sm text-purple-700 mb-1">参与的账本</p>
                   <p className="text-xl lg:text-2xl font-bold text-purple-600">
-                    {bills.filter((bill) => bill.isShared).length}
+                    {bills.filter((bill) => bill.permission !== "owner").length}
                   </p>
                 </div>
                 <Share2 className="h-6 w-6 lg:h-8 lg:w-8 text-purple-600" />
@@ -196,125 +204,98 @@ export default function BillsPage() {
             <CardContent className="p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-orange-700 mb-1">总成员数</p>
+                  <p className="text-sm text-orange-700 mb-1">总交易数</p>
                   <p className="text-xl lg:text-2xl font-bold text-orange-600">
-                    {bills.reduce((sum, bill) => sum + bill.memberCount, 0)}
+                    {bills.reduce((total, bill) => total + (bill.transactions?.length || 0), 0)}
                   </p>
                 </div>
-                <Users className="h-6 w-6 lg:h-8 lg:w-8 text-orange-600" />
+                <Tag className="h-6 w-6 lg:h-8 lg:w-8 text-orange-600" />
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
-          {filteredBills.map((bill) => (
-            <Card key={bill.id} className="shadow-sm hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-lg mb-2 truncate">{bill.name}</CardTitle>
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{bill.description || ''}</p>
-
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <Badge className={`text-xs ${getPermissionColor(bill.permission)}`}>
-                        {getPermissionIcon(bill.permission)}
-                        <span className="ml-1">{getPermissionText(bill.permission)}</span>
-                      </Badge>
-
-                      {bill.isShared && (
-                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
-                          <Share2 className="h-3 w-3 mr-1" />
-                          已共享
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/chat/${bill.id}`}>
-                          <BookOpen className="mr-2 h-4 w-4" />
-                          打开账本
-                        </Link>
-                      </DropdownMenuItem>
-
-                      <DropdownMenuItem onClick={() => openCategoriesModal(bill)}>
-                        <Tag className="mr-2 h-4 w-4" />
-                        管理分类
-                      </DropdownMenuItem>
-
-                      {bill.permission === "owner" && (
-                        <>
-                          <DropdownMenuItem onClick={() => openEditModal(bill)}>
-                            <Edit3 className="mr-2 h-4 w-4" />
-                            编辑账本
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openShareModal(bill)}>
-                            <Share2 className="mr-2 h-4 w-4" />
-                            分享账本
-                          </DropdownMenuItem>
-                        </>
-                      )}
-
-                      <DropdownMenuItem onClick={() => openMembersModal(bill)}>
-                        <Users className="mr-2 h-4 w-4" />
-                        管理成员
-                      </DropdownMenuItem>
-
-                      {bill.permission === "owner" && (
-                        <DropdownMenuItem onClick={() => handleDeleteBillFromContext(bill.id)} className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          删除账本
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-1" />
-                      <span>{bill.memberCount} 成员</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 text-xs text-gray-500">
-                  <span>
-                    创建者：{bill.owner} • {bill.createdAt}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {filteredBills.length === 0 && (
+        {filteredBills.length === 0 && searchTerm ? (
           <div className="text-center py-12">
-            <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">{searchTerm ? "未找到匹配的账本" : "还没有账本"}</h3>
-            <p className="text-gray-500 mb-4">
-              {searchTerm ? "尝试使用其他关键词搜索" : "创建你的第一个账本开始记账吧"}
-            </p>
-            {!searchTerm && (
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                创建账本
-              </Button>
-            )}
+            <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">未找到匹配的账本</h3>
+            <p className="text-gray-500">尝试使用不同的关键词搜索</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+            {filteredBills.map((bill) => (
+              <Card key={bill.id} className="hover:shadow-lg transition-shadow duration-200 cursor-pointer group">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                        {bill.name}
+                      </CardTitle>
+                      {bill.description && (
+                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{bill.description}</p>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/chat/${bill.id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            查看详情
+                          </Link>
+                        </DropdownMenuItem>
+                        {bill.permission === "owner" && (
+                          <>
+                            <DropdownMenuItem>
+                              <Edit3 className="mr-2 h-4 w-4" />
+                              编辑账本
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Users className="mr-2 h-4 w-4" />
+                              管理成员
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Tag className="mr-2 h-4 w-4" />
+                              管理分类
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-600">
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              删除账本
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <Badge className={`text-xs ${getPermissionColor(bill.permission)}`}>
+                      {getPermissionIcon(bill.permission)}
+                      <span className="ml-1">{getPermissionText(bill.permission)}</span>
+                    </Badge>
+                    <span className="text-xs text-gray-500">
+                      {bill.transactions?.length || 0} 条记录
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">
+                      {bill.categories?.length || 0} 个分类
+                    </span>
+                    <Link 
+                      href={`/chat/${bill.id}`}
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      进入账本 →
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </div>
@@ -322,53 +303,9 @@ export default function BillsPage() {
       <CreateBillModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onConfirm={handleCreateBill}
+        onSubmit={handleCreateBill}
+        isSubmitting={isCreating}
       />
-
-      {selectedBill && (
-        <>
-          <EditBillModal
-            isOpen={showEditModal}
-            onClose={() => {
-              setShowEditModal(false)
-              setSelectedBill(null)
-            }}
-            bill={selectedBill}
-            onConfirm={handleEditBill}
-          />
-
-          <ShareBillModal
-            isOpen={showShareModal}
-            onClose={() => {
-              setShowShareModal(false)
-              setSelectedBill(null)
-            }}
-            bill={selectedBill}
-          />
-
-          <ManageMembersModal
-            isOpen={showMembersModal}
-            onClose={() => {
-              setShowMembersModal(false)
-              setSelectedBill(null)
-            }}
-            bill={selectedBill}
-          />
-
-          <ManageCategoriesModal
-            isOpen={showCategoriesModal}
-            onClose={() => {
-              setShowCategoriesModal(false)
-              setSelectedBill(null)
-            }}
-            billName={selectedBill.name}
-            categories={selectedBill.categories}
-            onCategoriesChange={(updatedCategories) =>
-              handleUpdateBillCategoriesFromContext(selectedBill.id, updatedCategories)
-            }
-          />
-        </>
-      )}
     </AppLayout>
   )
 }

@@ -1,196 +1,228 @@
 "use client";
 
-import type React from 'react';
-import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import type { Bill, Category, Transaction } from '@/types'; // 假设 types.ts 在 types 目录下
-
-// 模拟默认分类数据
-const defaultInitialCategories: Category[] = [
-  { id: "income-1", name: "工资收入", type: "income", isDefault: true },
-  { id: "income-2", name: "奖金", type: "income", isDefault: true },
-  { id: "income-3", name: "投资收益", type: "income", isDefault: true },
-  { id: "income-4", name: "兼职收入", type: "income", isDefault: true },
-  { id: "income-5", name: "其他收入", type: "income", isDefault: true },
-  { id: "expense-1", name: "餐饮", type: "expense", isDefault: true },
-  { id: "expense-2", name: "交通", type: "expense", isDefault: true },
-  { id: "expense-3", name: "购物", type: "expense", isDefault: true },
-  { id: "expense-4", name: "娱乐", type: "expense", isDefault: true },
-  { id: "expense-5", name: "医疗", type: "expense", isDefault: true },
-  { id: "expense-6", name: "教育", type: "expense", isDefault: true },
-  { id: "expense-7", name: "住房", type: "expense", isDefault: true },
-  { id: "expense-8", name: "其他支出", type: "expense", isDefault: true },
-];
-
-// 模拟初始账本数据
-const initialMockBills: Bill[] = [
-  {
-    id: "1",
-    name: "个人账本",
-    description: "日常收支记录",
-    permission: "owner",
-    memberCount: 1,
-    createdAt: "2024-01-01",
-    isShared: false,
-    owner: "我",
-    categories: JSON.parse(JSON.stringify(defaultInitialCategories)),
-    transactions: [],
-  },
-  {
-    id: "2",
-    name: "家庭账本",
-    description: "家庭共同支出管理",
-    permission: "owner",
-    memberCount: 3,
-    createdAt: "2024-01-15",
-    isShared: true,
-    owner: "我",
-    categories: JSON.parse(JSON.stringify(defaultInitialCategories)),
-    transactions: [],
-  },
-];
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from './AuthContext'
+import type { Bill, Category, Transaction } from '@/types'
 
 interface BillContextType {
-  bills: Bill[];
-  currentBillId: string | null;
-  currentBill: Bill | null;
-  isLoading: boolean;
-  error: string | null;
-  fetchBills: () => void; // 暂时模拟
-  setCurrentBillId: (id: string | null) => void;
-  addBill: (billData: Omit<Bill, 'id' | 'categories' | 'transactions' | 'permission' | 'memberCount' | 'createdAt' | 'isShared' | 'owner'>) => void;
-  updateBill: (billId: string, billData: Partial<Omit<Bill, 'id' | 'categories' | 'transactions'>>) => void;
-  deleteBill: (billId: string) => void;
-  updateBillCategories: (billId: string, categories: Category[]) => void;
-  addTransaction: (billId: string, transactionData: Omit<Transaction, 'id' | 'bill_id'>) => void;
-  updateTransaction: (billId: string, transactionId: string, transactionData: Partial<Omit<Transaction, 'id' | 'bill_id'>>) => void;
-  deleteTransaction: (billId: string, transactionId: string) => void;
+  bills: Bill[]
+  currentBillId: string | null
+  currentBill: Bill | null
+  isLoading: boolean
+  setCurrentBillId: (billId: string) => void
+  fetchBills: () => Promise<void>
+  createBill: (name: string, description?: string) => Promise<{ error?: string }>
+  addTransaction: (billId: string, transaction: Omit<Transaction, 'id' | 'bill_id' | 'user_id' | 'created_at'>) => Promise<{ error?: string }>
+  createCategory: (billId: string, name: string, type: 'income' | 'expense') => Promise<{ error?: string }>
 }
 
-const BillContext = createContext<BillContextType | undefined>(undefined);
+const BillContext = createContext<BillContextType | undefined>(undefined)
 
-export const BillProvider = ({ children }: { children: ReactNode }) => {
-  const [bills, setBills] = useState<Bill[]>(initialMockBills);
-  const [currentBillId, setCurrentBillIdState] = useState<string | null>(initialMockBills.length > 0 ? initialMockBills[0].id : null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+export function BillProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const [bills, setBills] = useState<Bill[]>([])
+  const [currentBillId, setCurrentBillId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const fetchBills = useCallback(() => {
-    setIsLoading(true);
-    // 模拟API调用
-    setTimeout(() => {
-      setBills(initialMockBills);
-      if (initialMockBills.length > 0 && !currentBillId) {
-        setCurrentBillIdState(initialMockBills[0].id);
+  const currentBill = bills.find(bill => bill.id === currentBillId) || null
+
+  const fetchBills = async () => {
+    if (!user) return
+    
+    setIsLoading(true)
+    try {
+      // 获取用户拥有的账本
+      const { data: ownedBills, error: ownedError } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('owner_id', user.id)
+
+      if (ownedError) throw ownedError
+
+      // 获取用户参与的账本
+      const { data: memberBills, error: memberError } = await supabase
+        .from('bill_members')
+        .select(`
+          permission,
+          bills (*)
+        `)
+        .eq('user_id', user.id)
+
+      if (memberError) throw memberError
+
+      // 合并账本数据
+      const allBills: Bill[] = []
+      
+      // 添加拥有的账本
+      if (ownedBills) {
+        for (const bill of ownedBills) {
+          allBills.push({
+            ...bill,
+            permission: 'owner',
+            categories: [],
+            transactions: []
+          })
+        }
       }
-      setIsLoading(false);
-    }, 500);
-  }, [currentBillId]);
+
+      // 添加参与的账本
+      if (memberBills) {
+        for (const member of memberBills) {
+          if (member.bills) {
+            allBills.push({
+              ...member.bills as any,
+              permission: member.permission,
+              categories: [],
+              transactions: []
+            })
+          }
+        }
+      }
+
+      // 为每个账本获取分类和交易
+      for (const bill of allBills) {
+        // 获取分类
+        const { data: categories } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('bill_id', bill.id)
+
+        // 获取交易
+        const { data: transactions } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('bill_id', bill.id)
+          .order('date', { ascending: false })
+
+        bill.categories = categories || []
+        bill.transactions = transactions || []
+      }
+
+      setBills(allBills)
+    } catch (error) {
+      console.error('获取账本失败:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const createBill = async (name: string, description?: string) => {
+    if (!user) return { error: '用户未登录' }
+
+    try {
+      const { data, error } = await supabase
+        .from('bills')
+        .insert({
+          owner_id: user.id,
+          name,
+          description
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // 创建默认分类
+      const defaultCategories = [
+        { name: '工资收入', type: 'income' as const },
+        { name: '其他收入', type: 'income' as const },
+        { name: '餐饮', type: 'expense' as const },
+        { name: '交通', type: 'expense' as const },
+        { name: '购物', type: 'expense' as const },
+        { name: '娱乐', type: 'expense' as const },
+        { name: '其他支出', type: 'expense' as const }
+      ]
+
+      for (const category of defaultCategories) {
+        await supabase
+          .from('categories')
+          .insert({
+            bill_id: data.id,
+            user_id: user.id,
+            name: category.name,
+            type: category.type
+          })
+      }
+
+      await fetchBills()
+      return {}
+    } catch (error) {
+      return { error: '创建账本失败' }
+    }
+  }
+
+  const addTransaction = async (billId: string, transaction: Omit<Transaction, 'id' | 'bill_id' | 'user_id' | 'created_at'>) => {
+    if (!user) return { error: '用户未登录' }
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .insert({
+          ...transaction,
+          bill_id: billId,
+          user_id: user.id
+        })
+
+      if (error) throw error
+
+      await fetchBills()
+      return {}
+    } catch (error) {
+      return { error: '添加交易失败' }
+    }
+  }
+
+  const createCategory = async (billId: string, name: string, type: 'income' | 'expense') => {
+    if (!user) return { error: '用户未登录' }
+
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .insert({
+          bill_id: billId,
+          user_id: user.id,
+          name,
+          type
+        })
+
+      if (error) throw error
+
+      await fetchBills()
+      return {}
+    } catch (error) {
+      return { error: '创建分类失败' }
+    }
+  }
 
   useEffect(() => {
-    fetchBills();
-  }, [fetchBills]);
-
-  const setCurrentBillId = (id: string | null) => {
-    setCurrentBillIdState(id);
-  };
-
-  const addBill = (billData: Omit<Bill, 'id' | 'categories' | 'transactions' | 'permission' | 'memberCount' | 'createdAt' | 'isShared' | 'owner'>) => {
-    const newBill: Bill = {
-      id: Date.now().toString(),
-      ...billData,
-      permission: "owner",
-      memberCount: 1,
-      createdAt: new Date().toISOString().split("T")[0],
-      isShared: false,
-      owner: "我", // 模拟当前用户
-      categories: JSON.parse(JSON.stringify(defaultInitialCategories)),
-      transactions: [],
-    };
-    setBills(prev => [newBill, ...prev]);
-    if (!currentBillId) {
-      setCurrentBillIdState(newBill.id);
+    if (user) {
+      fetchBills()
+    } else {
+      setBills([])
+      setCurrentBillId(null)
     }
-  };
+  }, [user])
 
-  const updateBill = (billId: string, billData: Partial<Omit<Bill, 'id' | 'categories' | 'transactions'>>) => {
-    setBills(prev => prev.map(b => b.id === billId ? { ...b, ...billData } : b));
-  };
-
-  const deleteBill = (billId: string) => {
-    setBills(prev => prev.filter(b => b.id !== billId));
-    if (currentBillId === billId) {
-      setCurrentBillIdState(bills.length > 0 ? bills[0].id : null);
-    }
-  };
-
-  const updateBillCategories = (billId: string, categories: Category[]) => {
-    setBills(prev => prev.map(b => b.id === billId ? { ...b, categories } : b));
-  };
-
-  const addTransaction = (billId: string, transactionData: Omit<Transaction, 'id' | 'bill_id'>) => {
-    setBills(prevBills => prevBills.map(bill => {
-      if (bill.id === billId) {
-        const newTransaction: Transaction = {
-          id: Date.now().toString(),
-          bill_id: billId,
-          ...transactionData,
-          created_at: new Date().toISOString(),
-        };
-        return { ...bill, transactions: [newTransaction, ...bill.transactions] };
-      }
-      return bill;
-    }));
-  };
-
-  const updateTransaction = (billId: string, transactionId: string, transactionData: Partial<Omit<Transaction, 'id' | 'bill_id'>>) => {
-    setBills(prevBills => prevBills.map(bill => {
-      if (bill.id === billId) {
-        return {
-          ...bill,
-          transactions: bill.transactions.map(t => t.id === transactionId ? { ...t, ...transactionData } : t),
-        };
-      }
-      return bill;
-    }));
-  };
-
-  const deleteTransaction = (billId: string, transactionId: string) => {
-    setBills(prevBills => prevBills.map(bill => {
-      if (bill.id === billId) {
-        return { ...bill, transactions: bill.transactions.filter(t => t.id !== transactionId) };
-      }
-      return bill;
-    }));
-  };
-  
-  const currentBill = bills.find(bill => bill.id === currentBillId) || null;
-
-  return (
-    <BillContext.Provider value={{
-      bills,
-      currentBillId,
-      currentBill,
-      isLoading,
-      error,
-      fetchBills,
-      setCurrentBillId,
-      addBill,
-      updateBill,
-      deleteBill,
-      updateBillCategories,
-      addTransaction,
-      updateTransaction,
-      deleteTransaction
-    }}>
-      {children}
-    </BillContext.Provider>
-  );
-};
-
-export const useBills = () => {
-  const context = useContext(BillContext);
-  if (context === undefined) {
-    throw new Error('useBills must be used within a BillProvider');
+  const value = {
+    bills,
+    currentBillId,
+    currentBill,
+    isLoading,
+    setCurrentBillId,
+    fetchBills,
+    createBill,
+    addTransaction,
+    createCategory
   }
-  return context;
-}; 
+
+  return <BillContext.Provider value={value}>{children}</BillContext.Provider>
+}
+
+export function useBills() {
+  const context = useContext(BillContext)
+  if (context === undefined) {
+    throw new Error('useBills must be used within a BillProvider')
+  }
+  return context
+} 

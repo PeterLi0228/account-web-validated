@@ -11,46 +11,65 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { TrendingUp, TrendingDown, Calendar, DollarSign, User, MessageSquare, Tag } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useBills } from "@/contexts/BillContext"
+import type { Category } from "@/types"
 
 interface AddRecordModalProps {
   isOpen: boolean
   onClose: () => void
-  onAdd: (transaction: any) => void
+  categories: Category[]
+  billId: string
 }
 
-export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModalProps) {
+export default function AddRecordModal({ isOpen, onClose, categories, billId }: AddRecordModalProps) {
+  const { addTransaction } = useBills()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
-    type: "expense",
+    type: "expense" as "income" | "expense",
     date: new Date().toISOString().split("T")[0],
     item: "",
     amount: "",
     person: "",
     note: "",
+    category_id: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.item || !formData.amount || !formData.person) {
+    if (!formData.item || !formData.amount || !formData.person || !formData.category_id) {
       return
     }
 
-    onAdd({
-      ...formData,
+    setIsSubmitting(true)
+
+    const result = await addTransaction(billId, {
+      type: formData.type,
+      date: formData.date,
+      item: formData.item,
       amount: Number.parseFloat(formData.amount),
+      person: formData.person,
+      note: formData.note || undefined,
+      category_id: formData.category_id,
     })
 
-    // 重置表单
-    setFormData({
-      type: "expense",
-      date: new Date().toISOString().split("T")[0],
-      item: "",
-      amount: "",
-      person: "",
-      note: "",
-    })
+    if (!result.error) {
+      // 重置表单
+      setFormData({
+        type: "expense",
+        date: new Date().toISOString().split("T")[0],
+        item: "",
+        amount: "",
+        person: "",
+        note: "",
+        category_id: "",
+      })
+      onClose()
+    }
 
-    onClose()
+    setIsSubmitting(false)
   }
+
+  const filteredCategories = categories.filter(cat => cat.type === formData.type)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -73,7 +92,7 @@ export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModa
               className={`cursor-pointer transition-all ${
                 formData.type === "income" ? "ring-2 ring-green-500 bg-green-50" : "hover:bg-gray-50"
               }`}
-              onClick={() => setFormData({ ...formData, type: "income" })}
+              onClick={() => setFormData({ ...formData, type: "income", category_id: "" })}
             >
               <CardContent className="p-4 text-center">
                 <TrendingUp className="h-6 w-6 mx-auto mb-2 text-green-600" />
@@ -85,7 +104,7 @@ export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModa
               className={`cursor-pointer transition-all ${
                 formData.type === "expense" ? "ring-2 ring-red-500 bg-red-50" : "hover:bg-gray-50"
               }`}
-              onClick={() => setFormData({ ...formData, type: "expense" })}
+              onClick={() => setFormData({ ...formData, type: "expense", category_id: "" })}
             >
               <CardContent className="p-4 text-center">
                 <TrendingDown className="h-6 w-6 mx-auto mb-2 text-red-600" />
@@ -106,40 +125,36 @@ export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModa
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
               required
+              disabled={isSubmitting}
             />
           </div>
 
           {/* 分类 */}
           <div className="space-y-2">
-            <Label htmlFor="item" className="flex items-center">
+            <Label htmlFor="category" className="flex items-center">
               <Tag className="mr-2 h-4 w-4" />
               分类
             </Label>
-            <Select value={formData.item} onValueChange={(value) => setFormData({ ...formData, item: value })}>
+            <Select 
+              value={formData.category_id} 
+              onValueChange={(value) => {
+                const category = categories.find(cat => cat.id === value)
+                setFormData({ 
+                  ...formData, 
+                  category_id: value,
+                  item: category?.name || ""
+                })
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={formData.type === "income" ? "选择收入分类" : "选择支出分类"} />
               </SelectTrigger>
               <SelectContent>
-                {formData.type === "income" ? (
-                  <>
-                    <SelectItem value="工资收入">工资收入</SelectItem>
-                    <SelectItem value="奖金">奖金</SelectItem>
-                    <SelectItem value="投资收益">投资收益</SelectItem>
-                    <SelectItem value="兼职收入">兼职收入</SelectItem>
-                    <SelectItem value="其他收入">其他收入</SelectItem>
-                  </>
-                ) : (
-                  <>
-                    <SelectItem value="餐饮">餐饮</SelectItem>
-                    <SelectItem value="交通">交通</SelectItem>
-                    <SelectItem value="购物">购物</SelectItem>
-                    <SelectItem value="娱乐">娱乐</SelectItem>
-                    <SelectItem value="医疗">医疗</SelectItem>
-                    <SelectItem value="教育">教育</SelectItem>
-                    <SelectItem value="住房">住房</SelectItem>
-                    <SelectItem value="其他支出">其他支出</SelectItem>
-                  </>
-                )}
+                {filteredCategories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -161,6 +176,7 @@ export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModa
                 value={formData.amount}
                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                 required
+                disabled={isSubmitting}
               />
             </div>
           </div>
@@ -177,6 +193,7 @@ export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModa
               value={formData.person}
               onChange={(e) => setFormData({ ...formData, person: e.target.value })}
               required
+              disabled={isSubmitting}
             />
           </div>
 
@@ -192,23 +209,21 @@ export default function AddRecordModal({ isOpen, onClose, onAdd }: AddRecordModa
               rows={3}
               value={formData.note}
               onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+              disabled={isSubmitting}
             />
           </div>
 
           {/* 提交按钮 */}
           <div className="flex space-x-3">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={isSubmitting}>
               取消
             </Button>
-            <Button
-              type="submit"
-              className={`flex-1 text-white shadow-lg hover:shadow-xl transition-all duration-200 ${
-                formData.type === "income"
-                  ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                  : "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700"
-              }`}
+            <Button 
+              type="submit" 
+              className="flex-1"
+              disabled={isSubmitting || !formData.item || !formData.amount || !formData.person || !formData.category_id}
             >
-              保存记录
+              {isSubmitting ? "添加中..." : "确认添加"}
             </Button>
           </div>
         </form>

@@ -13,20 +13,25 @@ import { BookOpen, FileText, MessageSquare } from "lucide-react"
 interface CreateBillModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (billData: any) => void
+  onSubmit: (billData: { name: string; description?: string }) => Promise<void>
+  isSubmitting?: boolean
 }
 
-export default function CreateBillModal({ isOpen, onClose, onConfirm }: CreateBillModalProps) {
+export default function CreateBillModal({ isOpen, onClose, onSubmit, isSubmitting = false }: CreateBillModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.name.trim()) return
+    if (!formData.name.trim() || isSubmitting) return
 
-    onConfirm(formData)
+    await onSubmit({
+      name: formData.name.trim(),
+      description: formData.description.trim() || undefined
+    })
+    
     setFormData({ name: "", description: "" })
   }
 
@@ -52,6 +57,7 @@ export default function CreateBillModal({ isOpen, onClose, onConfirm }: CreateBi
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
+              disabled={isSubmitting}
             />
           </div>
 
@@ -66,6 +72,7 @@ export default function CreateBillModal({ isOpen, onClose, onConfirm }: CreateBi
               rows={3}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -80,14 +87,15 @@ export default function CreateBillModal({ isOpen, onClose, onConfirm }: CreateBi
           </div>
 
           <div className="flex space-x-3">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={isSubmitting}>
               取消
             </Button>
             <Button
               type="submit"
               className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+              disabled={isSubmitting || !formData.name.trim()}
             >
-              创建账本
+              {isSubmitting ? "创建中..." : "创建账本"}
             </Button>
           </div>
         </form>

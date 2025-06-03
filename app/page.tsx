@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, TrendingUp, TrendingDown, Wallet, Bot, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,79 +12,40 @@ import AddRecordModal from "./components/AddRecordModal"
 import TransactionTable from "./components/TransactionTable"
 import AppLayout from "./components/AppLayout"
 import Link from "next/link"
-
-// 模拟数据
-const mockTransactions = [
-  {
-    id: "1",
-    type: "income" as const,
-    date: "2024-01-15",
-    item: "工资收入",
-    amount: 8500,
-    person: "张三",
-    note: "月度工资",
-  },
-  {
-    id: "2",
-    type: "expense" as const,
-    date: "2024-01-14",
-    item: "超市购物",
-    amount: 268,
-    person: "李四",
-    note: "日用品采购",
-  },
-  {
-    id: "3",
-    type: "income" as const,
-    date: "2024-01-13",
-    item: "兼职收入",
-    amount: 1200,
-    person: "张三",
-    note: "",
-  },
-  {
-    id: "4",
-    type: "expense" as const,
-    date: "2024-01-12",
-    item: "餐饮消费",
-    amount: 89,
-    person: "王五",
-    note: "午餐",
-  },
-  {
-    id: "5",
-    type: "expense" as const,
-    date: "2023-12-28",
-    item: "购买书籍",
-    amount: 150,
-    person: "张三",
-    note: "技术书籍",
-  },
-  {
-    id: "6",
-    type: "income" as const,
-    date: "2023-12-25",
-    item: "年终奖",
-    amount: 5000,
-    person: "张三",
-    note: "年终奖金",
-  },
-]
+import { useAuth } from "@/contexts/AuthContext"
+import { useBills } from "@/contexts/BillContext"
+import { useRouter } from "next/navigation"
 
 export default function HomePage() {
+  const { user } = useAuth()
+  const { bills, currentBill, isLoading } = useBills()
+  const router = useRouter()
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [transactions, setTransactions] = useState(mockTransactions)
   const [dateFilter, setDateFilter] = useState("current-month")
   const [customStartDate, setCustomStartDate] = useState("")
   const [customEndDate, setCustomEndDate] = useState("")
 
+  useEffect(() => {
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
+    // 如果用户没有账本，跳转到账本管理页面
+    if (!isLoading && bills.length === 0) {
+      router.push('/bills')
+    }
+  }, [user, bills, isLoading, router])
+
   // 筛选交易记录
   const getFilteredTransactions = () => {
+    if (!currentBill?.transactions) return []
+    
     const now = new Date()
     const currentYear = now.getFullYear()
     const currentMonth = now.getMonth()
 
-    return transactions.filter((transaction) => {
+    return currentBill.transactions.filter((transaction) => {
       const transactionDate = new Date(transaction.date)
 
       switch (dateFilter) {
@@ -118,14 +79,6 @@ export default function HomePage() {
   const incomeTransactions = filteredTransactions.filter((t) => t.type === "income")
   const expenseTransactions = filteredTransactions.filter((t) => t.type === "expense")
 
-  const handleAddTransaction = (transaction: any) => {
-    const newTransaction = {
-      ...transaction,
-      id: Date.now().toString(),
-    }
-    setTransactions([newTransaction, ...transactions])
-  }
-
   const getDateFilterLabel = () => {
     switch (dateFilter) {
       case "current-month":
@@ -140,6 +93,35 @@ export default function HomePage() {
       default:
         return "全部"
     }
+  }
+
+  if (!user) {
+    return null
+  }
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="h-full flex items-center justify-center">
+          <p className="text-gray-500">加载中...</p>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  if (bills.length === 0) {
+    return (
+      <AppLayout>
+        <div className="h-full flex flex-col items-center justify-center p-4 text-center">
+          <Wallet className="h-16 w-16 text-gray-400 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">欢迎使用简记账</h2>
+          <p className="text-gray-500 mb-4">
+            您还没有创建任何账本，请先创建一个账本开始记账。
+          </p>
+          <Button onClick={() => router.push('/bills')}>创建账本</Button>
+        </div>
+      </AppLayout>
+    )
   }
 
   return (
@@ -198,102 +180,96 @@ export default function HomePage() {
         </Card>
 
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200/50 shadow-sm hover:shadow-md transition-shadow">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+          <Card className="shadow-sm border-l-4 border-l-green-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-700">总收入</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">
+                {getDateFilterLabel()}收入
+              </CardTitle>
               <TrendingUp className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl lg:text-2xl font-bold text-green-600">¥{totalIncome.toLocaleString()}</div>
-              <p className="text-xs text-green-600/70 mt-1">{getDateFilterLabel()}累计收入</p>
+              <div className="text-2xl font-bold text-green-600">
+                ¥{totalIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                共 {incomeTransactions.length} 笔收入
+              </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-red-50 to-rose-50 border-red-200/50 shadow-sm hover:shadow-md transition-shadow">
+          <Card className="shadow-sm border-l-4 border-l-red-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-red-700">总支出</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">
+                {getDateFilterLabel()}支出
+              </CardTitle>
               <TrendingDown className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl lg:text-2xl font-bold text-red-600">¥{totalExpense.toLocaleString()}</div>
-              <p className="text-xs text-red-600/70 mt-1">{getDateFilterLabel()}累计支出</p>
+              <div className="text-2xl font-bold text-red-600">
+                ¥{totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                共 {expenseTransactions.length} 笔支出
+              </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200/50 shadow-sm hover:shadow-md transition-shadow sm:col-span-2 lg:col-span-1">
+          <Card className="shadow-sm border-l-4 border-l-blue-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-700">当前余额</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">
+                {getDateFilterLabel()}结余
+              </CardTitle>
               <Wallet className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className={`text-xl lg:text-2xl font-bold ${balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                ¥{balance.toLocaleString()}
+              <div className={`text-2xl font-bold ${balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                ¥{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-xs text-blue-600/70 mt-1">收入减去支出</p>
+              <p className="text-xs text-gray-500 mt-1">
+                收入 - 支出
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* 快捷操作 */}
-        <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
-          <Button
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-            size="lg"
-          >
-            <Plus className="mr-2 h-5 w-5" />
+        {/* 快速操作 */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Button onClick={() => setIsAddModalOpen(true)} className="flex-1 sm:flex-none">
+            <Plus className="mr-2 h-4 w-4" />
             添加记录
           </Button>
-
-          <Button
-            asChild
-            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-            size="lg"
-          >
-            <Link href="/chat/1">
-              <Bot className="mr-2 h-5 w-5" />
-              AI智能记账
-            </Link>
-          </Button>
+          <Link href="/chat/1" className="flex-1 sm:flex-none">
+            <Button variant="outline" className="w-full">
+              <Bot className="mr-2 h-4 w-4" />
+              AI记账
+            </Button>
+          </Link>
         </div>
 
-        {/* 收支明细 */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
-          <Card className="shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center text-red-700">
-                <TrendingDown className="mr-2 h-5 w-5" />
-                支出明细
-                <Badge variant="secondary" className="ml-2 bg-red-100 text-red-700">
-                  {expenseTransactions.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TransactionTable transactions={expenseTransactions} type="expense" />
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center text-green-700">
-                <TrendingUp className="mr-2 h-5 w-5" />
-                收入明细
-                <Badge variant="secondary" className="ml-2 bg-green-100 text-green-700">
-                  {incomeTransactions.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TransactionTable transactions={incomeTransactions} type="income" />
-            </CardContent>
-          </Card>
-        </div>
+        {/* 交易记录表格 */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>最近交易记录</span>
+              <Badge variant="secondary">{filteredTransactions.length} 条记录</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TransactionTable transactions={filteredTransactions} />
+          </CardContent>
+        </Card>
       </div>
 
-      {/* 添加记录弹窗 */}
-      <AddRecordModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddTransaction} />
+      {/* 添加记录模态框 */}
+      {currentBill && (
+        <AddRecordModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          categories={currentBill.categories}
+          billId={currentBill.id}
+        />
+      )}
     </AppLayout>
   )
 }

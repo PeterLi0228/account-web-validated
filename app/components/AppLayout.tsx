@@ -21,10 +21,11 @@ import {
   LogOut,
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -46,14 +47,24 @@ const navItems: NavItem[] = [
 ]
 
 export default function AppLayout({ children }: AppLayoutProps) {
+  const { user, signOut, updateDisplayName } = useAuth()
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [userName, setUserName] = useState("用户名")
   const [showUserNameModal, setShowUserNameModal] = useState(false)
+  const [newDisplayName, setNewDisplayName] = useState("")
+  const [isUpdating, setIsUpdating] = useState(false)
   const pathname = usePathname()
 
+  const userName = user?.user_metadata?.display_name || "用户"
+
   useEffect(() => {
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024)
       if (window.innerWidth < 1024) {
@@ -64,7 +75,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     checkMobile()
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
-  }, [])
+  }, [user, router])
 
   const toggleSidebar = () => {
     if (isMobile) {
@@ -78,6 +89,28 @@ export default function AppLayout({ children }: AppLayoutProps) {
     if (isMobile) {
       setSidebarOpen(false)
     }
+  }
+
+  const handleUpdateDisplayName = async () => {
+    if (!newDisplayName.trim()) return
+
+    setIsUpdating(true)
+    const result = await updateDisplayName(newDisplayName.trim())
+    
+    if (!result.error) {
+      setShowUserNameModal(false)
+      setNewDisplayName("")
+    }
+    
+    setIsUpdating(false)
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+  }
+
+  if (!user) {
+    return null
   }
 
   return (
@@ -162,7 +195,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <Button
                 variant="ghost"
                 className="w-full justify-start px-3 py-2.5 text-gray-700 hover:bg-gray-100"
-                onClick={() => setShowUserNameModal(true)}
+                onClick={() => {
+                  setNewDisplayName(userName)
+                  setShowUserNameModal(true)
+                }}
               >
                 <User className="h-5 w-5 mr-3 text-gray-500" />
                 <div className="flex flex-col items-start">
@@ -174,10 +210,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <Button
                 variant="ghost"
                 className="w-full justify-start text-gray-700 hover:bg-gray-100"
-                onClick={() => {
-                  // 处理退出登录
-                  console.log("退出登录")
-                }}
+                onClick={handleSignOut}
               >
                 <LogOut className="h-5 w-5 mr-3 text-gray-500" />
                 退出登录
@@ -185,10 +218,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              <Button variant="ghost" size="sm" className="w-full p-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full p-2"
+                onClick={() => {
+                  setNewDisplayName(userName)
+                  setShowUserNameModal(true)
+                }}
+              >
                 <User className="h-5 w-5 text-gray-500" />
               </Button>
-              <Button variant="ghost" size="sm" className="w-full p-2">
+              <Button variant="ghost" size="sm" className="w-full p-2" onClick={handleSignOut}>
                 <LogOut className="h-5 w-5 text-gray-500" />
               </Button>
             </div>
@@ -198,59 +239,51 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       {/* 主内容区域 */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 顶部工具栏 */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 px-4 py-3 lg:px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              {/* 移动端菜单按钮 */}
-              <Button variant="ghost" size="sm" onClick={toggleSidebar} className="lg:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
-
-              {/* 页面标题 */}
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {navItems.find((item) => item.href === pathname)?.label || "简记账"}
-                </h2>
-              </div>
+        {/* 移动端顶部栏 */}
+        {isMobile && (
+          <div className="lg:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={toggleSidebar}>
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center space-x-2">
+              <Wallet className="h-6 w-6 text-blue-600" />
+              <span className="font-bold text-lg bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                简记账
+              </span>
             </div>
-
-            {/* 右侧操作 */}
-            <div className="flex items-center space-x-3">
-              {/* 用户头像 */}
-              <Button variant="ghost" size="sm" className="hidden sm:flex">
-                <User className="h-4 w-4 mr-2" />
-                <span className="hidden md:inline">用户名</span>
-              </Button>
-            </div>
+            <div className="w-9" /> {/* 占位符保持居中 */}
           </div>
-        </header>
+        )}
 
         {/* 页面内容 */}
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-hidden">{children}</main>
       </div>
-      {/* 修改用户名弹窗 */}
+
+      {/* 修改用户名对话框 */}
       <Dialog open={showUserNameModal} onOpenChange={setShowUserNameModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>修改用户名</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">用户名</Label>
+              <Label htmlFor="display-name">新用户名</Label>
               <Input
-                id="username"
+                id="display-name"
+                value={newDisplayName}
+                onChange={(e) => setNewDisplayName(e.target.value)}
                 placeholder="请输入新的用户名"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
+                disabled={isUpdating}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUserNameModal(false)}>
+            <Button variant="outline" onClick={() => setShowUserNameModal(false)} disabled={isUpdating}>
               取消
             </Button>
-            <Button onClick={() => setShowUserNameModal(false)}>保存</Button>
+            <Button onClick={handleUpdateDisplayName} disabled={isUpdating || !newDisplayName.trim()}>
+              {isUpdating ? "更新中..." : "确认"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,21 +1,19 @@
 "use client"
 
-import type React from "react"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Send, Bot, User, BookOpen, Plus, Edit3, Eye, Lock, Settings2, LayoutList } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import AppLayout from "../../components/AppLayout"
-import RecordConfirmModal from "../../components/RecordConfirmModal"
+import { useAuth } from "@/contexts/AuthContext"
 import { useBills } from "@/contexts/BillContext"
 import type { Bill, Transaction, Category } from "@/types"
-
-// Define TransactionData for the form/parsing, omitting id and bill_id
-type TransactionData = Omit<Transaction, 'id' | 'bill_id' | 'created_at' | 'category_name'>;
 
 interface Message {
   id: string
@@ -26,137 +24,85 @@ interface Message {
   isProcessing?: boolean
 }
 
+interface TransactionData {
+  type: "income" | "expense"
+  date: string
+  item: string
+  amount: number
+  person: string
+  note: string
+  category_id: string
+}
+
 export default function ChatPage() {
   const params = useParams()
   const router = useRouter()
-  const {
-    bills,
-    currentBillId,
-    setCurrentBillId,
-    currentBill,
-    addTransaction,
-    isLoading: billsLoading,
-    fetchBills,
-  } = useBills()
-
-  useEffect(() => {
-    const paramBillId = params.id as string;
-    if (paramBillId && paramBillId !== currentBillId) {
-      setCurrentBillId(paramBillId);
-    }
-  }, [params.id, setCurrentBillId, currentBillId]);
-
-  useEffect(() => {
-    if (!bills.length) {
-      fetchBills();
-    }
-  }, [bills.length, fetchBills]);
-
+  const { user } = useAuth()
+  const { bills, currentBillId, setCurrentBillId, addTransaction } = useBills()
+  
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState("")
   const [isAISending, setIsAISending] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [suggestedRecord, setSuggestedRecord] = useState<TransactionData | null>(null)
-
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+
+  const billId = params.id as string
+  const currentBill = bills.find(bill => bill.id === billId)
 
   useEffect(() => {
-    if (currentBill) {
-      setMessages([
-        {
-          id: "init-1",
-          type: "ai",
-          content: `你好！我是你的AI记账助手 💰 你正在操作账本「${currentBill.name}」。你可以用自然语言告诉我你的收支情况。`,
-          timestamp: new Date(),
-        },
-        {
-          id: "init-2",
-          type: "ai",
-          content: '💡 试试这些说法：\n• "今天吃饭花了50块"\n• "昨天收到工资3000元"\n• "打车花了25元"\n• "买衣服花了200块"',
-          timestamp: new Date(),
-        },
-      ])
-    } else if (!billsLoading && bills.length > 0 && !params.id) {
-      console.warn("Current bill not found, consider redirecting or showing an error.");
+    if (!user) {
+      router.push('/login')
+      return
     }
-  }, [currentBill, billsLoading, bills.length, params.id, router]);
 
-  const canEdit = currentBill && (currentBill.permission === "owner" || currentBill.permission === "edit_add" || currentBill.permission === "add_only")
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+    if (billId && billId !== currentBillId) {
+      setCurrentBillId(billId)
+    }
+  }, [user, billId, currentBillId, setCurrentBillId, router])
 
   useEffect(() => {
-    scrollToBottom()
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  useEffect(() => {
-    if (currentBill && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [currentBill]);
-  
+  const canEdit = currentBill?.permission === "owner" || currentBill?.permission === "edit_add" || currentBill?.permission === "add_only"
+
   const parseUserInput = useCallback((input: string): TransactionData | null => {
-    if (!currentBill) return null;
+    const amountMatch = input.match(/(\d+(?:\.\d{1,2})?)/);
+    if (!amountMatch) return null;
 
-    const lowerInput = input.toLowerCase();
-    let type: "income" | "expense" = "expense";
-    let amount = 0;
-    let item = "";
-    const note = input;
+    const amount = parseFloat(amountMatch[1]);
+    const isIncome = /收入|赚|工资|奖金|红包|转账收到/.test(input);
+    const type = isIncome ? "income" : "expense";
 
-    if (lowerInput.includes("收入") || lowerInput.includes("工资") || lowerInput.includes("奖金") || lowerInput.includes("赚了")) {
-      type = "income";
-    }
+    // 简单的项目识别
+    let item = "其他";
+    if (/餐|饭|吃|食/.test(input)) item = "餐饮";
+    else if (/交通|车|地铁|公交|打车|油费/.test(input)) item = "交通";
+    else if (/购物|买|商场|超市/.test(input)) item = "购物";
+    else if (/娱乐|电影|游戏|KTV/.test(input)) item = "娱乐";
+    else if (/工资|薪水/.test(input)) item = "工资收入";
 
-    const amountMatch = input.match(/(\d+(?:\.\d+)?)[元块钱块]?/);
-    if (amountMatch) {
-      amount = Number.parseFloat(amountMatch[1]);
-    } else {
-      return null; 
-    }
-    
-    let foundCategoryId: string | undefined = undefined;
-    const billCategories = currentBill.categories || [];
-
-    if (type === "income") {
-        item = "其他收入";
-        if (lowerInput.includes("工资")) item = "工资收入";
-        else if (lowerInput.includes("奖金")) item = "奖金";
-        else if (lowerInput.includes("投资")) item = "投资收益";
-        else if (lowerInput.includes("兼职")) item = "兼职收入";
-        foundCategoryId = billCategories.find((c: Category) => c.type === "income" && c.name.includes(item.substring(0,2)))?.id || billCategories.find((c: Category) => c.type === "income")?.id;
-    } else {
-        item = "其他支出";
-        if (lowerInput.includes("吃饭") || lowerInput.includes("用餐") || lowerInput.includes("餐")) item = "餐饮";
-        else if (lowerInput.includes("交通") || lowerInput.includes("打车") || lowerInput.includes("地铁")) item = "交通";
-        else if (lowerInput.includes("购物") || lowerInput.includes("买")) item = "购物";
-        else if (lowerInput.includes("娱乐")) item = "娱乐";
-        else if (lowerInput.includes("医疗")) item = "医疗";
-        else if (lowerInput.includes("教育")) item = "教育";
-        else if (lowerInput.includes("住房")) item = "住房";
-        foundCategoryId = billCategories.find((c: Category) => c.type === "expense" && c.name.includes(item.substring(0,2)))?.id || billCategories.find((c: Category) => c.type === "expense")?.id;
-    }
-
-    if (!foundCategoryId) {
-        console.warn("No matching category found, using a fallback. Please ensure categories are set.");
-    }
+    // 找到对应的分类ID
+    const category = currentBill?.categories.find(cat => 
+      cat.type === type && cat.name.includes(item)
+    ) || currentBill?.categories.find(cat => 
+      cat.type === type && cat.name.includes(type === "income" ? "其他收入" : "其他支出")
+    );
 
     return {
       type,
-      date: new Date().toISOString().split("T")[0],
+      date: new Date().toISOString().split('T')[0],
       item,
       amount,
-      person: "我",
-      note,
-      category_id: foundCategoryId || "uncategorized",
+      person: user?.user_metadata?.display_name || "我",
+      note: "",
+      category_id: category?.id || ""
     };
-  }, [currentBill]);
+  }, [currentBill, user]);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !canEdit || !currentBill) return
+    if (!inputValue.trim() || !canEdit || !currentBill || !user) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -169,34 +115,101 @@ export default function ChatPage() {
     const currentInput = inputValue;
     setInputValue("")
     setIsAISending(true)
+
+    // 保存用户消息到数据库
+    const { saveAILog } = await import('@/lib/ai')
+    await saveAILog(currentBill.id, user.id, 'user', currentInput)
+
+    // 添加处理中消息
     setMessages((prev: Message[]) => [...prev, {id: "ai-processing", type: "ai", content: "正在思考中...", timestamp: new Date(), isProcessing: true}])
 
-    setTimeout(() => {
-      setMessages((prev: Message[]) => prev.filter(m => m.id !== "ai-processing"));
-      const parsedRecord = parseUserInput(currentInput)
+    try {
+      // 调用AI服务
+      const { sendChatMessage } = await import('@/lib/ai')
+      const chatHistory = messages.slice(-5).map(msg => ({
+        role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.content
+      }))
+      
+      const aiResponse = await sendChatMessage([
+        ...chatHistory,
+        { role: 'user', content: currentInput }
+      ])
 
-      if (parsedRecord && parsedRecord.amount > 0) {
+      // 移除处理中消息
+      setMessages((prev: Message[]) => prev.filter(m => m.id !== "ai-processing"));
+
+      if (aiResponse.success) {
+        // 尝试解析用户输入
+        const parsedRecord = parseUserInput(currentInput)
+
+        let aiContent = aiResponse.message
+        let suggestedRecord: TransactionData | undefined = undefined
+
+        if (parsedRecord && parsedRecord.amount > 0) {
+          aiContent = `我帮你整理了一条${parsedRecord.type === "income" ? "收入" : "支出"}记录，请确认 👇`
+          suggestedRecord = parsedRecord
+        }
+
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
           type: "ai",
-          content: `我帮你整理了一条${parsedRecord.type === "income" ? "收入" : "支出"}记录，请确认 👇`,
+          content: aiContent,
           timestamp: new Date(),
-          suggestedRecord: parsedRecord,
+          suggestedRecord: suggestedRecord,
         }
+
         setMessages((prev: Message[]) => [...prev, aiMessage])
-        setSuggestedRecord(parsedRecord)
-        setShowConfirmModal(true)
+
+        // 保存AI回复到数据库
+        await saveAILog(currentBill.id, user.id, 'assistant', aiContent)
+
+        if (suggestedRecord) {
+          setSuggestedRecord(suggestedRecord)
+          setShowConfirmModal(true)
+        }
       } else {
-        const aiMessage: Message = {
+        const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           type: "ai",
-          content: "抱歉，我不太理解您的意思，或者您没有提供有效的金额。请尝试提供更明确的描述，例如：'购物花了50元'。",
+          content: aiResponse.message,
           timestamp: new Date(),
         }
-        setMessages((prev: Message[]) => [...prev, aiMessage])
+        setMessages((prev: Message[]) => [...prev, errorMessage])
       }
-      setIsAISending(false)
-    }, 1000)
+    } catch (error) {
+      // 移除处理中消息
+      setMessages((prev: Message[]) => prev.filter(m => m.id !== "ai-processing"));
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: "ai",
+        content: "抱歉，AI服务暂时不可用，请稍后重试。",
+        timestamp: new Date(),
+      }
+      setMessages((prev: Message[]) => [...prev, errorMessage])
+    }
+
+    setIsAISending(false)
+  }
+
+  const handleConfirmRecord = async () => {
+    if (!suggestedRecord || !currentBill) return
+
+    const result = await addTransaction(currentBill.id, suggestedRecord)
+    
+    if (!result.error) {
+      setShowConfirmModal(false)
+      setSuggestedRecord(null)
+      
+      const confirmMessage: Message = {
+        id: Date.now().toString(),
+        type: "ai",
+        content: "✅ 记录已成功添加到账本中！",
+        timestamp: new Date(),
+      }
+      setMessages((prev: Message[]) => [...prev, confirmMessage])
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -206,197 +219,184 @@ export default function ChatPage() {
     }
   }
 
-  const handleConfirmRecord = (confirmedRecord: TransactionData) => {
-    if (!currentBill) return;
-    addTransaction(currentBill.id, confirmedRecord);
+  if (!user) {
+    return null
+  }
 
-    const confirmMessage: Message = {
-      id: (Date.now() + 2).toString(),
-      type: "ai",
-      content: `✅ 记录已成功添加到「${currentBill.name}」！金额：${confirmedRecord.amount}，项目：${confirmedRecord.item}。继续告诉我其他收支情况吧~`,
-      timestamp: new Date(),
-    }
-    setMessages((prev: Message[]) => [...prev, confirmMessage])
-    setShowConfirmModal(false)
-    setSuggestedRecord(null)
-    if(inputRef.current) inputRef.current.focus();
-  }
-  
-  const handleBillChange = (newBillId: string) => {
-    if (newBillId !== currentBillId) {
-      setCurrentBillId(newBillId)
-      router.push(`/chat/${newBillId}`);
-    }
-  }
-  
-  if (billsLoading && !currentBill) {
+  if (!currentBill) {
     return (
       <AppLayout>
         <div className="h-full flex items-center justify-center">
-          <p className="text-gray-500">正在加载账本数据...</p>
+          <p className="text-gray-500">账本不存在或无权访问</p>
         </div>
       </AppLayout>
-    );
-  }
-
-  if (!currentBill && !billsLoading) {
-    return (
-      <AppLayout>
-        <div className="h-full flex flex-col items-center justify-center p-4 text-center">
-          <BookOpen className="h-16 w-16 text-gray-400 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">未找到账本</h2>
-          <p className="text-gray-500 mb-4">
-            您尝试访问的账本不存在，或者您还没有创建任何账本。
-          </p>
-          <Button onClick={() => router.push('/bills')}>返回账本列表</Button>
-        </div>
-      </AppLayout>
-    );
-  }
-  
-  if (!currentBill) {
-    return (
-        <AppLayout>
-            <div className="h-full flex items-center justify-center">
-                <p>账本信息加载中或账本不存在...</p>
-            </div>
-        </AppLayout>
-    );
+    )
   }
 
   return (
     <AppLayout>
       <div className="h-full flex flex-col">
-        <header className="p-4 border-b bg-gray-50/50 backdrop-blur-sm sticky top-0 z-10">
+        <header className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <BookOpen className="h-6 w-6 text-blue-600" />
-              <Select value={currentBillId || ""} onValueChange={handleBillChange}>
-                <SelectTrigger className="w-auto min-w-[180px] max-w-[300px] text-lg font-semibold">
-                  <SelectValue placeholder="选择账本..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {bills.map((bill: Bill) => (
-                    <SelectItem key={bill.id} value={bill.id}>
-                      {bill.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {currentBill.permission && (
-                 <Badge variant="outline" className={`text-xs ${currentBill.permission === "view_only" ? "text-gray-600" : currentBill.permission === "owner" ? "text-yellow-700" : "text-green-600" } ${currentBill.permission === "owner" ? "bg-yellow-100" : "bg-transparent"}`}>
-                  {currentBill.permission === "owner" ? "拥有者" : currentBill.permission === "edit_add" ? "可编辑" : currentBill.permission === "add_only" ? "仅添加" : "仅查看"}
-                </Badge>
-              )}
+            <div className="flex items-center space-x-3">
+              <Bot className="h-6 w-6 text-blue-600" />
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">AI智能记账</h1>
+                <p className="text-sm text-gray-500">当前账本：{currentBill.name}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-               <Button variant="outline" size="sm" onClick={() => router.push('/bills')}>
-                <LayoutList className="h-4 w-4 mr-2" />
-                账本列表
-              </Button>
-            </div>
+            <Badge className={`${
+              canEdit ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+            }`}>
+              {canEdit ? "可编辑" : "只读"}
+            </Badge>
           </div>
-          {currentBill.description && (
-            <p className="text-xs text-gray-500 mt-2 ml-9 truncate">
-              {currentBill.description}
-            </p>
-          )}
         </header>
 
         <ScrollArea className="flex-1 p-4 pb-20" ref={messagesEndRef as any}>
-          <div className="space-y-4">
-            {messages.map((msg: Message) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.type === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div className="flex items-end gap-2 max-w-[70%]">
-                  {msg.type === "ai" && (
-                    <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white">
-                      <Bot size={18} />
-                    </div>
-                  )}
-                  <div
-                    className={`px-4 py-2 rounded-2xl shadow-sm ${
-                      msg.type === "user"
-                        ? "bg-blue-600 text-white rounded-br-none"
-                        : msg.isProcessing 
-                        ? "bg-gray-200 text-gray-600 italic rounded-bl-none"
-                        : "bg-white text-gray-800 border border-gray-200/80 rounded-bl-none"
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    {msg.suggestedRecord && !msg.isProcessing && (
-                      <div className="mt-3 pt-3 border-t border-gray-300/50">
-                        <p className="text-xs text-gray-500 mb-1">
-                          {`识别到${msg.suggestedRecord.type === "income" ? "收入" : "支出"}：${msg.suggestedRecord.item}，金额：${msg.suggestedRecord.amount}`}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full bg-white/80 hover:bg-gray-50"
-                          onClick={() => {
-                            setSuggestedRecord(msg.suggestedRecord!)
-                            setShowConfirmModal(true)
-                          }}
-                        >
-                          确认并添加到账本
-                        </Button>
-                      </div>
-                    )}
+          <div className="max-w-3xl mx-auto space-y-4">
+            {messages.length === 0 && (
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="p-6 text-center">
+                  <Bot className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                    👋 你好！我是你的AI记账助手
+                  </h3>
+                  <p className="text-blue-700 mb-4">
+                    告诉我你的收支情况，我会帮你快速记录。例如：
+                  </p>
+                  <div className="space-y-2 text-sm text-blue-600">
+                    <p>• "今天午餐花了25元"</p>
+                    <p>• "收到工资8000元"</p>
+                    <p>• "打车回家花了15块"</p>
                   </div>
-                  {msg.type === "user" && (
-                     <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
-                       <User size={18} />
-                     </div>
-                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    message.type === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-900"
+                  }`}
+                >
+                  <div className="flex items-start space-x-2">
+                    {message.type === "ai" && (
+                      <Bot className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600" />
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm">{message.content}</p>
+                      {message.suggestedRecord && (
+                        <Card className="mt-2 bg-white border">
+                          <CardContent className="p-3">
+                            <div className="space-y-2 text-xs text-gray-700">
+                              <div className="flex justify-between">
+                                <span>类型:</span>
+                                <Badge variant={message.suggestedRecord.type === "income" ? "default" : "destructive"}>
+                                  {message.suggestedRecord.type === "income" ? "收入" : "支出"}
+                                </Badge>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>项目:</span>
+                                <span>{message.suggestedRecord.item}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>金额:</span>
+                                <span className="font-semibold">¥{message.suggestedRecord.amount}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>日期:</span>
+                                <span>{message.suggestedRecord.date}</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                      <p className="text-xs opacity-70 mt-1">
+                        {message.timestamp.toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+          <div ref={messagesEndRef} />
         </ScrollArea>
 
-        <footer className="p-4 border-t bg-white sticky bottom-0">
-          {!canEdit && (
-            <div className="text-center text-xs text-orange-600 mb-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
-              <Lock size={12} className="inline mr-1" />
-              当前账本为「仅查看」权限，无法添加记录。
+        <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex space-x-2">
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={canEdit ? "描述你的收支情况..." : "当前账本为只读模式"}
+                disabled={!canEdit || isAISending}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={!canEdit || !inputValue.trim() || isAISending}
+                className="px-4"
+              >
+                {isAISending ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-          )}
-          <div className="flex items-center gap-2">
-            <Input
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={canEdit ? "用自然语言描述你的收支，如：早餐花了10元" : "当前账本无记账权限"}
-              className="flex-1 text-sm"
-              disabled={!canEdit || isAISending}
-            />
-            <Button onClick={handleSendMessage} disabled={!inputValue.trim() || !canEdit || isAISending}>
-              <Send className="h-4 w-4 mr-0 sm:mr-2" />
-              <span className="hidden sm:inline">{isAISending ? "发送中..." : "发送"}</span>
-            </Button>
           </div>
-           <p className="text-xs text-gray-400 mt-2 text-center">
-            AI记账助手由简记账提供，结果仅供参考。
-          </p>
-        </footer>
+        </div>
       </div>
 
-      {showConfirmModal && suggestedRecord && currentBill && (
-        <RecordConfirmModal
-          isOpen={showConfirmModal}
-          onClose={() => {
-            setShowConfirmModal(false)
-            setSuggestedRecord(null)
-          }}
-          initialRecord={suggestedRecord}
-          categories={currentBill.categories || []}
-          onConfirm={handleConfirmRecord}
-          billName={currentBill.name}
-        />
-      )}
+      {/* 确认记录对话框 */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认添加记录</DialogTitle>
+          </DialogHeader>
+          {suggestedRecord && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">类型</label>
+                  <p className="text-sm text-gray-600">
+                    {suggestedRecord.type === "income" ? "收入" : "支出"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">金额</label>
+                  <p className="text-sm text-gray-600">¥{suggestedRecord.amount}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">项目</label>
+                  <p className="text-sm text-gray-600">{suggestedRecord.item}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">日期</label>
+                  <p className="text-sm text-gray-600">{suggestedRecord.date}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
+              取消
+            </Button>
+            <Button onClick={handleConfirmRecord}>
+              确认添加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   )
 }
