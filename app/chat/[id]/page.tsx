@@ -52,9 +52,24 @@ export default function ChatPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = useRef<any>(null)
 
   const billId = params.id as string
   const currentBill = bills.find(bill => bill.id === billId)
+
+  // 滚动到底部的函数
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+    // 备用方案：直接操作ScrollArea
+    if (scrollAreaRef.current) {
+      const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
+      if (scrollElement) {
+        scrollElement.scrollTop = scrollElement.scrollHeight
+      }
+    }
+  }, [])
 
   // 加载聊天历史
   const loadChatHistory = useCallback(async () => {
@@ -66,7 +81,8 @@ export default function ChatPage() {
         .from('ai_logs')
         .select('*')
         .eq('bill_id', billId)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
+        .limit(15)
 
       if (error) {
         console.error('加载聊天历史失败:', error.message || error)
@@ -74,13 +90,15 @@ export default function ChatPage() {
       }
 
       if (aiLogs && aiLogs.length > 0) {
-        const historyMessages: Message[] = aiLogs.map((log: any) => ({
-          id: log.id,
-          type: log.role === 'user' ? 'user' : 'ai',
-          content: log.content,
-          timestamp: new Date(log.created_at),
-          linkedTransactionId: log.linked_transaction_id
-        }))
+        const historyMessages: Message[] = aiLogs
+          .reverse() // 反转顺序，让最新的在底部
+          .map((log: any) => ({
+            id: log.id,
+            type: log.role === 'user' ? 'user' : 'ai',
+            content: log.content,
+            timestamp: new Date(log.created_at),
+            linkedTransactionId: log.linked_transaction_id
+          }))
 
         setMessages(historyMessages)
       }
@@ -107,9 +125,15 @@ export default function ChatPage() {
     }
   }, [user, billId, currentBillId, setCurrentBillId, router, loadChatHistory])
 
+  // 确保在消息更新后滚动到底部
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    if (!isLoadingHistory) {
+      // 使用requestAnimationFrame确保DOM已更新
+      requestAnimationFrame(() => {
+        setTimeout(scrollToBottom, 50)
+      })
+    }
+  }, [messages, isLoadingHistory, scrollToBottom])
 
   const canEdit = currentBill?.permission === "owner" || currentBill?.permission === "edit_add" || currentBill?.permission === "add_only"
 
@@ -359,8 +383,8 @@ export default function ChatPage() {
           </div>
         </header>
 
-        <ScrollArea className="flex-1 p-4 pb-20" ref={messagesEndRef as any}>
-          <div className="max-w-3xl mx-auto space-y-4">
+        <ScrollArea className="flex-1 p-4" ref={scrollAreaRef as any}>
+          <div className="max-w-3xl mx-auto space-y-4 pb-4">
             {isLoadingHistory && (
               <div className="text-center py-4">
                 <p className="text-gray-500">加载聊天历史中...</p>
@@ -463,8 +487,8 @@ export default function ChatPage() {
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
-          <div ref={messagesEndRef} />
         </ScrollArea>
 
         <div className="bg-white border-t border-gray-200 p-4 flex-shrink-0">
