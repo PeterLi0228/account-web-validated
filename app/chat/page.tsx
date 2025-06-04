@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Send, Bot, User, BookOpen, Plus, Edit3, Eye, Lock, Settings2, LayoutList } from "lucide-react"
+import { Send, Bot, User, BookOpen, Plus, Edit3, Eye, Lock, Settings2, LayoutList, Edit } from "lucide-react"
 import { useRouter } from "next/navigation"
 import AppLayout from "../components/AppLayout"
 import { useAuth } from "@/contexts/AuthContext"
@@ -23,6 +23,7 @@ interface Message {
   timestamp: Date
   suggestedRecord?: TransactionData
   isProcessing?: boolean
+  linkedTransactionId?: string // 关联的交易记录ID
 }
 
 interface TransactionData {
@@ -38,7 +39,7 @@ interface TransactionData {
 export default function ChatPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const { bills, currentBillId, setCurrentBillId, addTransaction } = useBills()
+  const { bills, currentBillId, setCurrentBillId, addTransaction, fetchBills } = useBills()
   
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState("")
@@ -48,6 +49,8 @@ export default function ChatPage() {
   const [suggestedRecord, setSuggestedRecord] = useState<TransactionData | null>(null)
   const [selectedBillId, setSelectedBillId] = useState<string>("")
   const [isConfirming, setIsConfirming] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 获取当前选中的账本
@@ -82,11 +85,12 @@ export default function ChatPage() {
       }
 
       if (aiLogs && aiLogs.length > 0) {
-        const historyMessages: Message[] = aiLogs.map((log: AILog) => ({
+        const historyMessages: Message[] = aiLogs.map((log: any) => ({
           id: log.id,
           type: log.role === 'user' ? 'user' : 'ai',
           content: log.content,
-          timestamp: new Date(log.created_at)
+          timestamp: new Date(log.created_at),
+          linkedTransactionId: log.linked_transaction_id
         }))
 
         setMessages(historyMessages)
@@ -254,7 +258,7 @@ export default function ChatPage() {
     try {
       const result = await addTransaction(currentBill.id, suggestedRecord)
       
-      if (!result.error) {
+      if (!result.error && result.data) {
         setShowConfirmModal(false)
         setSuggestedRecord(null)
         
@@ -266,9 +270,9 @@ export default function ChatPage() {
         }
         setMessages((prev: Message[]) => [...prev, confirmMessage])
 
-        // 保存确认消息到数据库
-        const { saveAILog } = await import('@/lib/ai')
-        await saveAILog(currentBill.id, user!.id, 'assistant', "✅ 记录已成功添加到账本中！")
+        // 保存确认消息到数据库，关联交易记录ID
+        const { saveAILogWithTransaction } = await import('@/lib/ai')
+        await saveAILogWithTransaction(currentBill.id, user!.id, 'assistant', "✅ 记录已成功添加到账本中！", result.data.id)
       }
     } catch (error) {
       console.error('确认记录失败:', error)
@@ -289,31 +293,56 @@ export default function ChatPage() {
     setMessages([]) // 清空当前消息
   }
 
-  if (!user) {
-    return null
+  // 获取交易记录详情
+  const handleEditTransaction = async (transactionId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .single()
+
+      if (error) {
+        console.error('获取交易记录失败:', error)
+        return
+      }
+
+      if (data) {
+        setEditingTransaction(data)
+        setShowEditModal(true)
+      }
+    } catch (error) {
+      console.error('获取交易记录失败:', error)
+    }
   }
 
-  // 如果没有账本，引导用户创建
-  if (bills.length === 0) {
-    return (
-      <AppLayout>
-        <div className="h-full flex items-center justify-center">
-          <Card className="max-w-md mx-auto">
-            <CardContent className="p-6 text-center">
-              <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">还没有账本</h3>
-              <p className="text-gray-600 mb-4">
-                您需要先创建一个账本才能使用AI记账功能
-              </p>
-              <Button onClick={() => router.push('/bills')}>
-                <Plus className="mr-2 h-4 w-4" />
-                创建账本
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </AppLayout>
-    )
+  // 更新交易记录
+  const handleUpdateTransaction = async (transactionData: Partial<Transaction>) => {
+    if (!editingTransaction) return
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update(transactionData)
+        .eq('id', editingTransaction.id)
+
+      if (error) {
+        console.error('更新交易记录失败:', error)
+        return
+      }
+
+      // 刷新账本数据
+      await fetchBills()
+      
+      setShowEditModal(false)
+      setEditingTransaction(null)
+    } catch (error) {
+      console.error('更新交易记录失败:', error)
+    }
+  }
+
+  if (!user) {
+    return null
   }
 
   return (
@@ -441,8 +470,34 @@ export default function ChatPage() {
                                 <span>{message.suggestedRecord.date}</span>
                               </div>
                             </div>
+                            <div className="mt-3 pt-2 border-t">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSuggestedRecord(message.suggestedRecord!)
+                                  setShowConfirmModal(true)
+                                }}
+                                className="w-full text-xs"
+                              >
+                                确认添加记录
+                              </Button>
+                            </div>
                           </CardContent>
                         </Card>
+                      )}
+                      {/* 为包含linkedTransactionId的消息添加编辑按钮 */}
+                      {message.type === "ai" && message.linkedTransactionId && canEdit && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditTransaction(message.linkedTransactionId!)}
+                            className="text-xs"
+                          >
+                            <Edit className="h-3 w-3 mr-1" />
+                            编辑记录
+                          </Button>
+                        </div>
                       )}
                       <p className="text-xs opacity-70 mt-1">
                         {message.timestamp.toLocaleTimeString()}
@@ -494,25 +549,96 @@ export default function ChatPage() {
           </DialogHeader>
           {suggestedRecord && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">类型</label>
-                  <p className="text-sm text-gray-600">
-                    {suggestedRecord.type === "income" ? "收入" : "支出"}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">金额</label>
-                  <p className="text-sm text-gray-600">¥{suggestedRecord.amount}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">项目</label>
-                  <p className="text-sm text-gray-600">{suggestedRecord.item}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">日期</label>
-                  <p className="text-sm text-gray-600">{suggestedRecord.date}</p>
-                </div>
+              <div>
+                <label className="text-sm font-medium">类型</label>
+                <Select 
+                  value={suggestedRecord.type} 
+                  onValueChange={(value: "income" | "expense") => 
+                    setSuggestedRecord({ ...suggestedRecord, type: value })
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="income">收入</SelectItem>
+                    <SelectItem value="expense">支出</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">分类</label>
+                <Select 
+                  value={suggestedRecord.category_id} 
+                  onValueChange={(value) => {
+                    // value格式为 "originalId_categoryName"
+                    const [originalId, categoryName] = value.split('_')
+                    setSuggestedRecord({ 
+                      ...suggestedRecord, 
+                      category_id: originalId,
+                      item: categoryName
+                    })
+                  }}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="选择分类" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentBill?.categories
+                      .filter(cat => cat.type === suggestedRecord.type)
+                      .flatMap((category) => {
+                        // 将分号分隔的分类名称拆分成单独的选项
+                        const categoryNames = category.name.split(';').map(name => name.trim()).filter(name => name)
+                        return categoryNames.map(name => ({
+                          id: `${category.original_id || category.id}_${name}`,
+                          name: name,
+                          originalId: category.original_id || category.id
+                        }))
+                      })
+                      .map((categoryOption) => (
+                        <SelectItem key={categoryOption.id} value={categoryOption.id}>
+                          {categoryOption.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">金额</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={suggestedRecord.amount}
+                  onChange={(e) => setSuggestedRecord({ 
+                    ...suggestedRecord, 
+                    amount: parseFloat(e.target.value) || 0 
+                  })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">日期</label>
+                <Input
+                  type="date"
+                  value={suggestedRecord.date}
+                  onChange={(e) => setSuggestedRecord({ 
+                    ...suggestedRecord, 
+                    date: e.target.value 
+                  })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">备注</label>
+                <Input
+                  value={suggestedRecord.note}
+                  onChange={(e) => setSuggestedRecord({ 
+                    ...suggestedRecord, 
+                    note: e.target.value 
+                  })}
+                  placeholder="备注信息（可选）"
+                  className="mt-1"
+                />
               </div>
             </div>
           )}
@@ -536,6 +662,113 @@ export default function ChatPage() {
               ) : (
                 "确认添加"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑交易记录对话框 */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Edit className="mr-2 h-5 w-5 text-blue-600" />
+              编辑交易记录
+            </DialogTitle>
+          </DialogHeader>
+          {editingTransaction && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">金额</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editingTransaction.amount}
+                  onChange={(e) => setEditingTransaction({ ...editingTransaction, amount: parseFloat(e.target.value) || 0 })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">分类</label>
+                <Select 
+                  value={editingTransaction.category_id || ""} 
+                  onValueChange={(value) => {
+                    // value格式为 "originalId_categoryName"
+                    const [originalId, categoryName] = value.split('_')
+                    setEditingTransaction({ 
+                      ...editingTransaction, 
+                      category_id: originalId,
+                      item: categoryName
+                    })
+                  }}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="选择分类" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentBill?.categories
+                      .filter(cat => cat.type === editingTransaction.type)
+                      .flatMap((category) => {
+                        // 将分号分隔的分类名称拆分成单独的选项
+                        const categoryNames = category.name.split(';').map(name => name.trim()).filter(name => name)
+                        return categoryNames.map(name => ({
+                          id: `${category.original_id || category.id}_${name}`,
+                          name: name,
+                          originalId: category.original_id || category.id
+                        }))
+                      })
+                      .map((categoryOption) => (
+                        <SelectItem key={categoryOption.id} value={categoryOption.id}>
+                          {categoryOption.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">日期</label>
+                <Input
+                  type="date"
+                  value={editingTransaction.date}
+                  onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">经办人</label>
+                <Input
+                  value={editingTransaction.person || ''}
+                  readOnly
+                  disabled
+                  className="mt-1 bg-gray-50"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">备注</label>
+                <Input
+                  value={editingTransaction.note || ''}
+                  onChange={(e) => setEditingTransaction({ ...editingTransaction, note: e.target.value })}
+                  placeholder="备注信息"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEditModal(false)
+                setEditingTransaction(null)
+              }}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={() => handleUpdateTransaction(editingTransaction!)}
+              disabled={!editingTransaction}
+            >
+              保存修改
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -13,7 +13,7 @@ interface BillContextType {
   setCurrentBillId: (billId: string) => void
   fetchBills: () => Promise<void>
   createBill: (name: string, description?: string) => Promise<{ error?: string }>
-  addTransaction: (billId: string, transaction: Omit<Transaction, 'id' | 'bill_id' | 'user_id' | 'created_at'>) => Promise<{ error?: string }>
+  addTransaction: (billId: string, transaction: Omit<Transaction, 'id' | 'bill_id' | 'user_id' | 'created_at'>) => Promise<{ error?: string; data?: Transaction }>
   createCategory: (billId: string, name: string, type: 'income' | 'expense') => Promise<{ error?: string }>
 }
 
@@ -249,7 +249,7 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
       }
 
       await fetchBills()
-      return {}
+      return { data: data[0] }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '添加交易失败'
       console.error('添加交易异常:', errorMessage)

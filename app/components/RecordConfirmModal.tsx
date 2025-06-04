@@ -35,7 +35,22 @@ export default function RecordConfirmModal({
   const [formData, setFormData] = useState<TransactionFormData>(initialRecord)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const availableCategories = categories.filter(cat => cat.type === formData.type)
+  // 获取当前类型的所有可用分类选项（展开分号分隔的分类）
+  const getAvailableCategoryOptions = () => {
+    return categories
+      .filter(cat => cat.type === formData.type)
+      .flatMap((category) => {
+        const categoryNames = category.name.split(';').map(name => name.trim()).filter(name => name)
+        return categoryNames.map(name => ({
+          id: `${category.original_id || category.id}_${name}`,
+          name: name,
+          originalId: category.original_id || category.id,
+          categoryId: category.id
+        }))
+      })
+  }
+
+  const availableCategoryOptions = getAvailableCategoryOptions()
 
   useEffect(() => {
     setFormData(initialRecord)
@@ -44,15 +59,25 @@ export default function RecordConfirmModal({
 
   useEffect(() => {
     if (initialRecord) {
-        const categoryExists = availableCategories.some(cat => cat.id === initialRecord.category_id);
-        if (!categoryExists && availableCategories.length > 0) {
-            setFormData((prev: TransactionFormData) => ({ ...prev, category_id: availableCategories[0].id }));
-        } else if (!categoryExists && availableCategories.length === 0) {
-            setFormData((prev: TransactionFormData) => ({ ...prev, category_id: "" }));
+        // 检查当前分类是否在可用选项中
+        const currentCategoryExists = availableCategoryOptions.some(opt => 
+          opt.originalId === initialRecord.category_id && opt.name === initialRecord.item
+        );
+        
+        if (!currentCategoryExists && availableCategoryOptions.length > 0) {
+            // 如果当前分类不存在，选择第一个可用分类
+            const firstOption = availableCategoryOptions[0]
+            setFormData((prev: TransactionFormData) => ({ 
+              ...prev, 
+              category_id: firstOption.originalId,
+              item: firstOption.name
+            }));
+        } else if (availableCategoryOptions.length === 0) {
+            setFormData((prev: TransactionFormData) => ({ ...prev, category_id: "", item: "" }));
             console.warn(`No categories available for type: ${formData.type} in bill: ${billName}`);
         }
     }
-  }, [initialRecord, availableCategories, formData.type, billName]);
+  }, [initialRecord, formData.type, billName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -66,14 +91,10 @@ export default function RecordConfirmModal({
     setIsSubmitting(true)
 
     try {
-      // 获取选中分类的原始ID
-      const selectedCategory = availableCategories.find(cat => cat.id === formData.category_id)
-      const categoryId = selectedCategory?.original_id || formData.category_id
-
-      // 使用原始ID提交
+      // 直接使用category_id提交
       await onConfirm({
         ...formData,
-        category_id: categoryId
+        category_id: formData.category_id
       })
     } catch (error) {
       console.error('提交记录失败:', error)
@@ -133,11 +154,11 @@ export default function RecordConfirmModal({
                   <span className="text-gray-600">日期：</span>
                   <span className="font-medium text-gray-800">{formData.date}</span>
                 </div>
-                 {formData.category_id && availableCategories.find(c => c.id === formData.category_id) && (
+                 {formData.category_id && formData.item && (
                     <div className="flex items-center">
                         <TagIcon className="h-4 w-4 mr-2 text-gray-500" />
                         <span className="text-gray-600">分类：</span>
-                        <span className="font-medium text-gray-800">{availableCategories.find(c => c.id === formData.category_id)?.name}</span>
+                        <span className="font-medium text-gray-800">{formData.item}</span>
                     </div>
                 )}
                 {formData.person && (
@@ -222,16 +243,24 @@ export default function RecordConfirmModal({
                 分类
               </Label>
               <Select
-                value={formData.category_id}
-                onValueChange={(value: string) => setFormData({ ...formData, category_id: value })}
+                value={formData.category_id && formData.item ? `${formData.category_id}_${formData.item}` : ""}
+                onValueChange={(value: string) => {
+                  // value格式为 "originalId_categoryName"
+                  const [originalId, categoryName] = value.split('_')
+                  setFormData({ 
+                    ...formData, 
+                    category_id: originalId,
+                    item: categoryName
+                  })
+                }}
                 required
               >
                 <SelectTrigger className="text-sm">
-                  <SelectValue placeholder={availableCategories.length > 0 ? "选择分类" : "无可用分类"} />
+                  <SelectValue placeholder={availableCategoryOptions.length > 0 ? "选择分类" : "无可用分类"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableCategories.length > 0 ? (
-                    availableCategories.map((category) => (
+                  {availableCategoryOptions.length > 0 ? (
+                    availableCategoryOptions.map((category) => (
                       <SelectItem key={category.id} value={category.id} className="text-sm">
                         {category.name}
                       </SelectItem>
@@ -243,7 +272,7 @@ export default function RecordConfirmModal({
                   )}
                 </SelectContent>
               </Select>
-               {availableCategories.length === 0 && (
+               {availableCategoryOptions.length === 0 && (
                 <p className="text-xs text-red-500 mt-1">
                   请先在账本设置中添加"{formData.type === 'income' ? '收入' : '支出'}分类。
                 </p>
@@ -289,7 +318,7 @@ export default function RecordConfirmModal({
             </Button>
             <Button
               type="submit"
-              disabled={!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "" || availableCategories.length === 0 || isSubmitting}
+              disabled={!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "" || availableCategoryOptions.length === 0 || isSubmitting}
               className={`flex-1 text-white shadow-lg hover:shadow-xl transition-all duration-200 ${
                 formData.type === "income"
                   ? "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"

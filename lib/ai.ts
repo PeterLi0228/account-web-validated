@@ -72,4 +72,26 @@ export async function saveAILog(billId: string, userId: string, role: 'user' | '
   } catch (error) {
     console.error('保存AI日志失败:', error)
   }
+}
+
+export async function saveAILogWithTransaction(billId: string, userId: string, role: 'user' | 'assistant', content: string, linkedTransactionId: string) {
+  try {
+    const { supabase } = await import('@/lib/supabase')
+    
+    const { error } = await supabase
+      .from('ai_logs')
+      .insert({
+        bill_id: billId,
+        user_id: userId,
+        role,
+        content,
+        linked_transaction_id: linkedTransactionId
+      })
+
+    if (error) {
+      console.error('保存AI日志失败:', error)
+    }
+  } catch (error) {
+    console.error('保存AI日志失败:', error)
+  }
 } 

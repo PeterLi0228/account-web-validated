@@ -48,10 +48,6 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
 
     setIsSubmitting(true)
 
-    // 获取选中分类的原始ID
-    const selectedCategory = categories.find(cat => cat.id === formData.category_id)
-    const categoryId = selectedCategory?.original_id || formData.category_id
-
     const result = await addTransaction(billId, {
       type: formData.type,
       date: formData.date,
@@ -59,7 +55,7 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
       amount: Number.parseFloat(formData.amount),
       person: getUserDisplayName(), // 直接存储display name
       note: formData.note || undefined,
-      category_id: categoryId, // 使用原始ID
+      category_id: formData.category_id, // 直接使用category_id
     })
 
     if (!result.error) {
@@ -145,13 +141,14 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
               分类
             </Label>
             <Select 
-              value={formData.category_id} 
+              value={formData.category_id ? `${formData.category_id}_${formData.item}` : ""} 
               onValueChange={(value) => {
-                const category = categories.find(cat => cat.id === value)
+                // value格式为 "originalId_categoryName"
+                const [originalId, categoryName] = value.split('_')
                 setFormData({ 
                   ...formData, 
-                  category_id: value,
-                  item: category?.name || ""
+                  category_id: originalId,
+                  item: categoryName
                 })
               }}
             >
@@ -159,11 +156,22 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
                 <SelectValue placeholder={formData.type === "income" ? "选择收入分类" : "选择支出分类"} />
               </SelectTrigger>
               <SelectContent>
-                {filteredCategories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name}
-                  </SelectItem>
-                ))}
+                {categories
+                  .filter(cat => cat.type === formData.type)
+                  .flatMap((category) => {
+                    // 将分号分隔的分类名称拆分成单独的选项
+                    const categoryNames = category.name.split(';').map(name => name.trim()).filter(name => name)
+                    return categoryNames.map(name => ({
+                      id: `${category.original_id || category.id}_${name}`,
+                      name: name,
+                      originalId: category.original_id || category.id
+                    }))
+                  })
+                  .map((categoryOption) => (
+                    <SelectItem key={categoryOption.id} value={categoryOption.id}>
+                      {categoryOption.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>

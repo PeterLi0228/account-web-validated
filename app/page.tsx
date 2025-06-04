@@ -312,7 +312,11 @@ export default function HomePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TransactionTable transactions={filteredTransactions} />
+            <TransactionTable 
+              transactions={filteredTransactions} 
+              canEdit={currentBill?.permission === 'owner' || currentBill?.permission === 'edit_add'}
+              categories={currentBill?.categories}
+            />
           </CardContent>
         </Card>
       </div>

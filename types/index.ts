@@ -60,4 +60,5 @@ export interface AILog {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  linked_transaction_id?: string; // 关联的交易记录ID
 } 
