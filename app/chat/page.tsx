@@ -74,11 +74,12 @@ export default function ChatPage() {
   // 初始化选择最近的账本
   useEffect(() => {
     if (bills.length > 0 && !selectedBillId) {
-      // 选择最近创建的账本
-      const latestBill = bills.sort((a, b) => 
+      // 优先选择默认账本
+      const defaultBill = bills.find(bill => bill.is_default)
+      const billToSelect = defaultBill || bills.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )[0]
-      setSelectedBillId(latestBill.id)
+      setSelectedBillId(billToSelect.id)
     }
   }, [bills, selectedBillId])
 

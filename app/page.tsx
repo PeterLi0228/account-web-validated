@@ -43,6 +43,16 @@ export default function HomePage() {
     }
   }, [user, bills, isLoading, currentBillId, setCurrentBillId, router])
 
+  // 初始化选择账本
+  useEffect(() => {
+    if (bills.length > 0 && !currentBillId) {
+      // 优先选择默认账本
+      const defaultBill = bills.find(bill => bill.is_default)
+      const billToSelect = defaultBill || bills[0]
+      setCurrentBillId(billToSelect.id)
+    }
+  }, [bills, currentBillId])
+
   // 筛选交易记录
   const getFilteredTransactions = () => {
     if (!currentBill?.transactions) return []

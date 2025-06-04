@@ -21,7 +21,7 @@ import type { Bill } from "@/types"
 
 export default function BillsPage() {
   const { user } = useAuth()
-  const { bills, isLoading, createBill, fetchBills } = useBills()
+  const { bills, isLoading, createBill, fetchBills, setCurrentBillId } = useBills()
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -38,9 +38,15 @@ export default function BillsPage() {
     }
   }, [user, router])
 
-  const filteredBills = bills.filter(bill =>
-    bill.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredBills = bills
+    .filter(bill => bill.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => {
+      // 默认账本排在最前面
+      if (a.is_default && !b.is_default) return -1
+      if (!a.is_default && b.is_default) return 1
+      // 其他按创建时间排序（最新的在前）
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
 
   const getPermissionIcon = (permission?: string) => {
     switch (permission) {
@@ -165,6 +171,63 @@ export default function BillsPage() {
     } catch (error) {
       console.error('删除账本失败:', error)
       alert('删除账本失败')
+    }
+  }
+
+  const handleSetDefault = async (bill: Bill) => {
+    try {
+      console.log('设置默认账本:', bill.name, bill.id)
+      console.log('当前用户ID:', user!.id)
+      
+      // 使用单个查询来更新所有账本的默认状态
+      // 首先将所有账本设为非默认
+      const { error: resetError } = await supabase
+        .from('bills')
+        .update({ is_default: false })
+        .eq('owner_id', user!.id)
+
+      if (resetError) {
+        console.error('重置默认账本失败:', resetError)
+        alert('设置默认账本失败: ' + resetError.message)
+        return
+      }
+      console.log('重置所有账本的默认状态成功')
+
+      // 然后将选中的账本设为默认
+      const { error: setError } = await supabase
+        .from('bills')
+        .update({ is_default: true })
+        .eq('id', bill.id)
+        .eq('owner_id', user!.id) // 额外的安全检查
+
+      if (setError) {
+        console.error('设置默认账本失败:', setError)
+        alert('设置默认账本失败: ' + setError.message)
+        return
+      }
+      console.log('设置账本为默认成功:', bill.name)
+
+      // 验证设置是否成功
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('bills')
+        .select('id, name, is_default')
+        .eq('owner_id', user!.id)
+
+      if (verifyError) {
+        console.error('验证设置失败:', verifyError)
+      } else {
+        console.log('验证结果 - 所有账本状态:', verifyData)
+      }
+
+      await fetchBills()
+      
+      // 强制设置当前选中的账本为默认账本
+      setCurrentBillId(bill.id)
+      
+      console.log('刷新账本列表完成')
+    } catch (error) {
+      console.error('设置默认账本失败:', error)
+      alert('设置默认账本失败')
     }
   }
 
@@ -314,7 +377,7 @@ export default function BillsPage() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" className="h-8 w-8 p-0">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -325,6 +388,12 @@ export default function BillsPage() {
                               <Edit3 className="mr-2 h-4 w-4" />
                               编辑账本
                             </DropdownMenuItem>
+                            {!bill.is_default && (
+                              <DropdownMenuItem onClick={() => handleSetDefault(bill)}>
+                                <Crown className="mr-2 h-4 w-4" />
+                                设为默认
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => handleManageMembers(bill)}>
                               <Users className="mr-2 h-4 w-4" />
                               管理成员
@@ -334,13 +403,19 @@ export default function BillsPage() {
                               管理分类
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              className="text-red-600"
                               onClick={() => handleDeleteBill(bill)}
+                              className="text-red-600 hover:text-red-700"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               删除账本
                             </DropdownMenuItem>
                           </>
+                        )}
+                        {bill.permission !== "owner" && (
+                          <DropdownMenuItem onClick={() => handleManageCategories(bill)}>
+                            <Tag className="mr-2 h-4 w-4" />
+                            查看分类
+                          </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -348,10 +423,17 @@ export default function BillsPage() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="flex items-center justify-between mb-3">
-                    <Badge className={`text-xs ${getPermissionColor(bill.permission)}`}>
-                      {getPermissionIcon(bill.permission)}
-                      <span className="ml-1">{getPermissionText(bill.permission)}</span>
-                    </Badge>
+                    <div className="flex items-center space-x-2">
+                      <Badge className={`text-xs ${getPermissionColor(bill.permission)}`}>
+                        {getPermissionIcon(bill.permission)}
+                        <span className="ml-1">{getPermissionText(bill.permission)}</span>
+                      </Badge>
+                      {bill.is_default && (
+                        <Badge className="text-xs bg-orange-100 text-orange-700">
+                          默认
+                        </Badge>
+                      )}
+                    </div>
                     <span className="text-xs text-gray-500">
                       {bill.transactions?.length || 0} 条记录
                     </span>

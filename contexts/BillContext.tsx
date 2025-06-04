@@ -40,7 +40,7 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
       console.log('fetchBills: 查询用户拥有的账本...')
       const { data: ownedBills, error: ownedError } = await supabase
         .from('bills')
-        .select('*')
+        .select('*, is_default')
         .eq('owner_id', user.id)
 
       if (ownedError) {
@@ -55,7 +55,7 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
         .from('bill_members')
         .select(`
           permission,
-          bills (*)
+          bills (*, is_default)
         `)
         .eq('user_id', user.id)
 
@@ -156,6 +156,20 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
 
       console.log('fetchBills: 最终账本列表:', allBills)
       setBills(allBills)
+
+      // 检查是否有默认账本，有的话优先选择默认账本
+      const defaultBill = allBills.find(bill => bill.is_default)
+      console.log('fetchBills: 查找默认账本:', defaultBill)
+      
+      if (defaultBill) {
+        console.log('fetchBills: 发现默认账本，设置为当前账本:', defaultBill.name)
+        setCurrentBillId(defaultBill.id)
+      } else if (!currentBillId && allBills.length > 0) {
+        // 如果没有默认账本且当前没有选中的账本，自动选择第一个账本
+        const billToSelect = allBills[0]
+        console.log('fetchBills: 没有默认账本，选择第一个账本:', billToSelect.name)
+        setCurrentBillId(billToSelect.id)
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '获取账本失败'
       console.error('fetchBills: 获取账本失败:', errorMessage)
@@ -164,69 +178,44 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const createBill = async (name: string, description?: string) => {
+  const createBill = async (name: string, description?: string): Promise<{ error?: string }> => {
     if (!user) return { error: '用户未登录' }
 
     try {
-      console.log('开始创建账本:', { name, userId: user.id })
-      
-      // 使用正确的insert格式，不包含description字段
+      // 检查是否是第一个账本
+      const { data: existingBills, error: checkError } = await supabase
+        .from('bills')
+        .select('id')
+        .eq('owner_id', user.id)
+
+      if (checkError) {
+        console.error('检查现有账本失败:', checkError)
+        return { error: '创建账本失败' }
+      }
+
+      const isFirstBill = !existingBills || existingBills.length === 0
+
       const { data, error } = await supabase
         .from('bills')
-        .insert([{
+        .insert({
           owner_id: user.id,
-          name: name
-        }])
+          name,
+          description,
+          is_default: isFirstBill // 第一个账本自动设为默认
+        })
         .select()
+        .single()
 
       if (error) {
-        console.error('创建账本失败:', error.message || error)
-        return { error: error.message || '创建账本失败' }
+        console.error('创建账本失败:', error)
+        return { error: '创建账本失败' }
       }
 
-      if (!data || data.length === 0) {
-        return { error: '创建账本失败：未返回数据' }
-      }
-
-      const newBill = data[0]
-      console.log('账本创建成功:', newBill)
-
-      // 创建默认分类（合并同类型分类）
-      const incomeCategories = ['工资收入', '其他收入']
-      const expenseCategories = ['餐饮', '交通', '购物', '娱乐', '其他支出']
-
-      console.log('开始创建默认分类...')
-      const categoryInserts = [
-        {
-          bill_id: newBill.id,
-          user_id: user.id,
-          name: incomeCategories.join(';'), // 使用分号分隔收入分类
-          type: 'income'
-        },
-        {
-          bill_id: newBill.id,
-          user_id: user.id,
-          name: expenseCategories.join(';'), // 使用分号分隔支出分类
-          type: 'expense'
-        }
-      ]
-
-      const { error: categoryError } = await supabase
-        .from('categories')
-        .insert(categoryInserts)
-
-      if (categoryError) {
-        console.error('创建默认分类失败:', categoryError.message || categoryError)
-      }
-
-      console.log('开始刷新账本列表...')
       await fetchBills()
-      console.log('账本创建流程完成')
       return {}
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '创建账本失败'
-      console.error('创建账本异常:', errorMessage)
-      return { error: errorMessage }
+      console.error('创建账本失败:', error)
+      return { error: '创建账本失败' }
     }
   }
 

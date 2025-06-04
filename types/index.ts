@@ -37,6 +37,7 @@ export interface Bill {
   name: string;
   description?: string; // 账本描述
   created_at: string;
+  is_default?: boolean; // 是否为默认账本
   permission?: 'owner' | 'edit_add' | 'add_only' | 'view_only'; // 权限，owner表示创建者
   memberCount: number; // 成员数量
   createdAt: string; // 创建日期 YYYY-MM-DD
