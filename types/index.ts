@@ -13,6 +13,7 @@ export interface Category {
   name: string;
   type: "income" | "expense";
   created_at: string;
+  original_id?: string; // 原始分类ID，用于复合ID的情况
 }
 
 export interface Transaction {

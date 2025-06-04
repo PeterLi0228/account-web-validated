@@ -117,6 +117,29 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
           console.error('获取分类失败:', categoriesError.message)
         }
 
+        // 将合并的分类字符串拆分为单独的分类对象
+        const expandedCategories: any[] = []
+        if (categories) {
+          for (const category of categories) {
+            const categoryNames = category.name.split(';')
+            for (const name of categoryNames) {
+              if (name.trim()) {
+                expandedCategories.push({
+                  id: `${category.id}_${name.trim()}`, // 生成唯一ID
+                  bill_id: category.bill_id,
+                  user_id: category.user_id,
+                  name: name.trim(),
+                  type: category.type,
+                  created_at: category.created_at,
+                  original_id: category.id // 保存原始ID用于后续操作
+                })
+              }
+            }
+          }
+        }
+
+        bill.categories = expandedCategories
+
         // 获取交易
         const { data: transactions, error: transactionsError } = await supabase
           .from('transactions')
@@ -128,7 +151,6 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
           console.error('获取交易失败:', transactionsError.message)
         }
 
-        bill.categories = categories || []
         bill.transactions = transactions || []
       }
 
@@ -169,24 +191,25 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
       const newBill = data[0]
       console.log('账本创建成功:', newBill)
 
-      // 创建默认分类
-      const defaultCategories = [
-        { name: '工资收入', type: 'income' as const },
-        { name: '其他收入', type: 'income' as const },
-        { name: '餐饮', type: 'expense' as const },
-        { name: '交通', type: 'expense' as const },
-        { name: '购物', type: 'expense' as const },
-        { name: '娱乐', type: 'expense' as const },
-        { name: '其他支出', type: 'expense' as const }
-      ]
+      // 创建默认分类（合并同类型分类）
+      const incomeCategories = ['工资收入', '其他收入']
+      const expenseCategories = ['餐饮', '交通', '购物', '娱乐', '其他支出']
 
       console.log('开始创建默认分类...')
-      const categoryInserts = defaultCategories.map(category => ({
-        bill_id: newBill.id,
-        user_id: user.id,
-        name: category.name,
-        type: category.type
-      }))
+      const categoryInserts = [
+        {
+          bill_id: newBill.id,
+          user_id: user.id,
+          name: incomeCategories.join(';'), // 使用分号分隔收入分类
+          type: 'income'
+        },
+        {
+          bill_id: newBill.id,
+          user_id: user.id,
+          name: expenseCategories.join(';'), // 使用分号分隔支出分类
+          type: 'expense'
+        }
+      ]
 
       const { error: categoryError } = await supabase
         .from('categories')
@@ -237,20 +260,67 @@ export function BillProvider({ children }: { children: React.ReactNode }) {
   const createCategory = async (billId: string, name: string, type: 'income' | 'expense') => {
     if (!user) return { error: '用户未登录' }
 
-    try {
-      const { data, error } = await supabase
-        .from('categories')
-        .insert([{
-          bill_id: billId,
-          user_id: user.id,
-          name: name,
-          type: type
-        }])
-        .select()
+    // 验证分类名称不能包含分号分隔符
+    if (name.includes(';')) {
+      return { error: '分类名称不能包含分号(;)字符' }
+    }
 
-      if (error) {
-        console.error('创建分类失败:', error.message || error)
-        return { error: error.message || '创建分类失败' }
+    // 验证分类名称不能为空
+    if (!name.trim()) {
+      return { error: '分类名称不能为空' }
+    }
+
+    try {
+      // 首先查找是否已存在该类型的分类记录
+      const { data: existingCategories, error: fetchError } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('bill_id', billId)
+        .eq('type', type)
+
+      if (fetchError) {
+        console.error('查询现有分类失败:', fetchError.message)
+        return { error: '查询现有分类失败' }
+      }
+
+      if (existingCategories && existingCategories.length > 0) {
+        // 如果已存在该类型的分类，则更新现有记录
+        const existingCategory = existingCategories[0]
+        const currentNames = existingCategory.name.split(';').map((n: string) => n.trim()).filter((n: string) => n)
+        
+        // 检查是否已存在该分类名称
+        if (currentNames.includes(name.trim())) {
+          return { error: '该分类已存在' }
+        }
+
+        // 添加新分类名称
+        currentNames.push(name.trim())
+        const updatedName = currentNames.join(';')
+
+        const { error: updateError } = await supabase
+          .from('categories')
+          .update({ name: updatedName })
+          .eq('id', existingCategory.id)
+
+        if (updateError) {
+          console.error('更新分类失败:', updateError.message)
+          return { error: '更新分类失败' }
+        }
+      } else {
+        // 如果不存在该类型的分类，则创建新记录
+        const { error: insertError } = await supabase
+          .from('categories')
+          .insert([{
+            bill_id: billId,
+            user_id: user.id,
+            name: name.trim(),
+            type: type
+          }])
+
+        if (insertError) {
+          console.error('创建分类失败:', insertError.message)
+          return { error: '创建分类失败' }
+        }
       }
 
       await fetchBills()

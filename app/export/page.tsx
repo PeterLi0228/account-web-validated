@@ -87,7 +87,7 @@ export default function ExportPage() {
   const generateCSV = (transactions: Transaction[]) => {
     const headers = ['日期', '类型', '项目', '金额', '分类', '经办人', '备注']
     const rows = transactions.map(transaction => {
-      const category = selectedBill?.categories.find(c => c.id === transaction.category_id)
+      const category = selectedBill?.categories.find(c => c.original_id === transaction.category_id || c.id === transaction.category_id)
       return [
         transaction.date,
         transaction.type === 'income' ? '收入' : '支出',

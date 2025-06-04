@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
     selectedBill.transactions
       .filter(t => t.type === 'expense')
       .forEach(transaction => {
-        const category = selectedBill.categories.find(c => c.id === transaction.category_id)
+        const category = selectedBill.categories.find(c => c.original_id === transaction.category_id || c.id === transaction.category_id)
         const categoryName = category?.name || '其他'
         
         if (!categoryStats[categoryName]) {

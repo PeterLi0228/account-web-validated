@@ -47,6 +47,7 @@ export default function ChatPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [suggestedRecord, setSuggestedRecord] = useState<TransactionData | null>(null)
+  const [isConfirming, setIsConfirming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const billId = params.id as string
@@ -138,7 +139,7 @@ export default function ChatPage() {
       amount,
       person: user?.user_metadata?.display_name || "我",
       note: "",
-      category_id: category?.id || ""
+      category_id: category?.original_id || category?.id || ""
     };
   }, [currentBill, user]);
 
@@ -235,25 +236,33 @@ export default function ChatPage() {
   }
 
   const handleConfirmRecord = async () => {
-    if (!suggestedRecord || !currentBill) return
+    if (!suggestedRecord || !currentBill || isConfirming) return
 
-    const result = await addTransaction(currentBill.id, suggestedRecord)
+    setIsConfirming(true)
     
-    if (!result.error) {
-      setShowConfirmModal(false)
-      setSuggestedRecord(null)
+    try {
+      const result = await addTransaction(currentBill.id, suggestedRecord)
       
-      const confirmMessage: Message = {
-        id: Date.now().toString(),
-        type: "ai",
-        content: "✅ 记录已成功添加到账本中！",
-        timestamp: new Date(),
-      }
-      setMessages((prev: Message[]) => [...prev, confirmMessage])
+      if (!result.error) {
+        setShowConfirmModal(false)
+        setSuggestedRecord(null)
+        
+        const confirmMessage: Message = {
+          id: Date.now().toString(),
+          type: "ai",
+          content: "✅ 记录已成功添加到账本中！",
+          timestamp: new Date(),
+        }
+        setMessages((prev: Message[]) => [...prev, confirmMessage])
 
-      // 保存确认消息到数据库
-      const { saveAILog } = await import('@/lib/ai')
-      await saveAILog(currentBill.id, user!.id, 'assistant', "✅ 记录已成功添加到账本中！")
+        // 保存确认消息到数据库
+        const { saveAILog } = await import('@/lib/ai')
+        await saveAILog(currentBill.id, user!.id, 'assistant', "✅ 记录已成功添加到账本中！")
+      }
+    } catch (error) {
+      console.error('确认记录失败:', error)
+    } finally {
+      setIsConfirming(false)
     }
   }
 
@@ -439,11 +448,25 @@ export default function ChatPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowConfirmModal(false)}
+              disabled={isConfirming}
+            >
               取消
             </Button>
-            <Button onClick={handleConfirmRecord}>
-              确认添加
+            <Button 
+              onClick={handleConfirmRecord}
+              disabled={isConfirming}
+            >
+              {isConfirming ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  添加中...
+                </>
+              ) : (
+                "确认添加"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

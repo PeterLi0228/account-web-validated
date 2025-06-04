@@ -31,7 +31,7 @@ export default function HomePage() {
       return
     }
 
-    // 如果用户没有账本，跳转到账本管理页面
+    // 只有在加载完成且确实没有账本时才跳转到账本管理页面
     if (!isLoading && bills.length === 0) {
       router.push('/bills')
       return

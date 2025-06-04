@@ -33,8 +33,14 @@ export default function RecordConfirmModal({
   billName,
 }: RecordConfirmModalProps) {
   const [formData, setFormData] = useState<TransactionFormData>(initialRecord)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const availableCategories = categories.filter((cat) => cat.type === formData.type)
+  const availableCategories = categories.filter(cat => cat.type === formData.type)
+
+  useEffect(() => {
+    setFormData(initialRecord)
+    setIsSubmitting(false) // 重置提交状态
+  }, [initialRecord])
 
   useEffect(() => {
     if (initialRecord) {
@@ -48,13 +54,32 @@ export default function RecordConfirmModal({
     }
   }, [initialRecord, availableCategories, formData.type, billName]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "") {
-        alert("请选择一个有效的分类。");
+    if (!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "" || isSubmitting) {
+        if (!isSubmitting) {
+          alert("请选择一个有效的分类。");
+        }
         return;
     }
-    onConfirm(formData)
+
+    setIsSubmitting(true)
+
+    try {
+      // 获取选中分类的原始ID
+      const selectedCategory = availableCategories.find(cat => cat.id === formData.category_id)
+      const categoryId = selectedCategory?.original_id || formData.category_id
+
+      // 使用原始ID提交
+      await onConfirm({
+        ...formData,
+        category_id: categoryId
+      })
+    } catch (error) {
+      console.error('提交记录失败:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const formatAmount = (amount: number) => {
@@ -259,19 +284,19 @@ export default function RecordConfirmModal({
 
           {/* 提交按钮 */}
           <div className="flex space-x-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={isSubmitting}>
               取消
             </Button>
             <Button
               type="submit"
-              disabled={!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "" || availableCategories.length === 0}
+              disabled={!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "" || availableCategories.length === 0 || isSubmitting}
               className={`flex-1 text-white shadow-lg hover:shadow-xl transition-all duration-200 ${
                 formData.type === "income"
                   ? "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
                   : "bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600"
               }`}
             >
-              {formData.type === "income" ? "确认收入" : "确认支出"}
+              {isSubmitting ? "添加中..." : (formData.type === "income" ? "确认收入" : "确认支出")}
             </Button>
           </div>
         </form>

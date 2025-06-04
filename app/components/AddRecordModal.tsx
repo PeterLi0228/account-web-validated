@@ -48,6 +48,10 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
 
     setIsSubmitting(true)
 
+    // 获取选中分类的原始ID
+    const selectedCategory = categories.find(cat => cat.id === formData.category_id)
+    const categoryId = selectedCategory?.original_id || formData.category_id
+
     const result = await addTransaction(billId, {
       type: formData.type,
       date: formData.date,
@@ -55,7 +59,7 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
       amount: Number.parseFloat(formData.amount),
       person: getUserDisplayName(), // 直接存储display name
       note: formData.note || undefined,
-      category_id: formData.category_id,
+      category_id: categoryId, // 使用原始ID
     })
 
     if (!result.error) {
