@@ -1,13 +1,17 @@
-const OPENROUTER_API_KEY = process.env.NEXT_PUBLIC_Router_API_KEY!
+const OPENROUTER_API_KEY = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || process.env.NEXT_PUBLIC_Router_API_KEY!
 
 export async function sendChatMessage(messages: Array<{ role: 'user' | 'assistant', content: string }>) {
   try {
+    if (!OPENROUTER_API_KEY) {
+      throw new Error('API密钥未配置')
+    }
+    
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': window.location.origin,
-        'X-Title': '简记账',
+        'X-Title': 'Simple Accounting',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -29,10 +33,13 @@ export async function sendChatMessage(messages: Array<{ role: 'user' | 'assistan
     })
 
     if (!response.ok) {
-      throw new Error('AI服务暂时不可用')
+      const errorText = await response.text()
+      console.error('API错误响应:', errorText)
+      throw new Error(`AI服务错误: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()
+    
     return {
       success: true,
       message: data.choices[0]?.message?.content || '抱歉，我没有理解您的意思，请重新描述。'
@@ -41,7 +48,7 @@ export async function sendChatMessage(messages: Array<{ role: 'user' | 'assistan
     console.error('AI请求失败:', error)
     return {
       success: false,
-      message: '抱歉，AI服务暂时不可用，请稍后重试。'
+      message: `抱歉，AI服务暂时不可用：${error instanceof Error ? error.message : '未知错误'}`
     }
   }
 }
