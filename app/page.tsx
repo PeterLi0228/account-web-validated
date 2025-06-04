@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, TrendingUp, TrendingDown, Wallet, Bot, Filter } from "lucide-react"
+import { Plus, TrendingUp, TrendingDown, Wallet, Bot, Filter, BookOpen, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation"
 
 export default function HomePage() {
   const { user } = useAuth()
-  const { bills, currentBill, isLoading } = useBills()
+  const { bills, currentBillId, setCurrentBillId, currentBill, isLoading } = useBills()
   const router = useRouter()
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [dateFilter, setDateFilter] = useState("current-month")
@@ -34,8 +34,14 @@ export default function HomePage() {
     // 如果用户没有账本，跳转到账本管理页面
     if (!isLoading && bills.length === 0) {
       router.push('/bills')
+      return
     }
-  }, [user, bills, isLoading, router])
+
+    // 如果有账本但没有选中当前账本，自动选择第一个账本
+    if (!isLoading && bills.length > 0 && !currentBillId) {
+      setCurrentBillId(bills[0].id)
+    }
+  }, [user, bills, isLoading, currentBillId, setCurrentBillId, router])
 
   // 筛选交易记录
   const getFilteredTransactions = () => {
@@ -127,18 +133,64 @@ export default function HomePage() {
   return (
     <AppLayout>
       <div className="p-4 lg:p-8 space-y-6">
-        {/* 时间筛选器 */}
+        {/* 筛选器 */}
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center text-gray-700">
               <Filter className="mr-2 h-5 w-5" />
-              时间筛选
+              筛选设置
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1">
-                <Label htmlFor="date-filter">筛选时间</Label>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 账本选择 */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-gray-500" />
+                  <Label htmlFor="bill-filter" className="font-medium">选择账本</Label>
+                </div>
+                <Select value={currentBillId || ""} onValueChange={setCurrentBillId}>
+                  <SelectTrigger id="bill-filter">
+                    <SelectValue placeholder="请选择账本" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bills.map((bill) => (
+                      <SelectItem key={bill.id} value={bill.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{bill.name}</span>
+                          <div className="flex items-center gap-2 ml-4">
+                            {bill.isShared && (
+                              <Badge variant="secondary" className="text-xs">
+                                共享
+                              </Badge>
+                            )}
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs ${
+                                bill.permission === 'owner' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : 
+                                bill.permission === 'edit_add' ? 'bg-green-100 text-green-700 border-green-300' : 
+                                bill.permission === 'add_only' ? 'bg-blue-100 text-blue-700 border-blue-300' : 
+                                'bg-gray-100 text-gray-700 border-gray-300'
+                              }`}
+                            >
+                              {bill.permission === 'owner' ? '拥有者' : 
+                               bill.permission === 'edit_add' ? '编辑' : 
+                               bill.permission === 'add_only' ? '添加' : '查看'}
+                            </Badge>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 时间筛选 */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <Label htmlFor="date-filter" className="font-medium">时间范围</Label>
+                </div>
                 <Select value={dateFilter} onValueChange={setDateFilter}>
                   <SelectTrigger id="date-filter">
                     <SelectValue />
@@ -151,30 +203,30 @@ export default function HomePage() {
                     <SelectItem value="all">全部时间</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
 
-              {dateFilter === "custom" && (
-                <>
-                  <div className="flex-1">
-                    <Label htmlFor="start-date">开始日期</Label>
-                    <Input
-                      id="start-date"
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                    />
+                {dateFilter === "custom" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="start-date" className="text-sm">开始日期</Label>
+                      <Input
+                        id="start-date"
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="end-date" className="text-sm">结束日期</Label>
+                      <Input
+                        id="end-date"
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <Label htmlFor="end-date">结束日期</Label>
-                    <Input
-                      id="end-date"
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                    />
-                  </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -235,12 +287,16 @@ export default function HomePage() {
 
         {/* 快速操作 */}
         <div className="flex flex-col sm:flex-row gap-4">
-          <Button onClick={() => setIsAddModalOpen(true)} className="flex-1 sm:flex-none">
+          <Button 
+            onClick={() => setIsAddModalOpen(true)} 
+            className="flex-1 sm:flex-none"
+            disabled={!currentBill || (currentBill.permission === 'view_only')}
+          >
             <Plus className="mr-2 h-4 w-4" />
             添加记录
           </Button>
-          <Link href="/chat/1" className="flex-1 sm:flex-none">
-            <Button variant="outline" className="w-full">
+          <Link href={`/chat/${currentBillId || '1'}`} className="flex-1 sm:flex-none">
+            <Button variant="outline" className="w-full" disabled={!currentBill}>
               <Bot className="mr-2 h-4 w-4" />
               AI记账
             </Button>

@@ -2,16 +2,17 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, Calendar, DollarSign, User, MessageSquare, Tag } from "lucide-react"
+import { TrendingUp, TrendingDown, Calendar, DollarSign, MessageSquare, Tag } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBills } from "@/contexts/BillContext"
+import { useAuth } from "@/contexts/AuthContext"
 import type { Category } from "@/types"
 
 interface AddRecordModalProps {
@@ -23,20 +24,25 @@ interface AddRecordModalProps {
 
 export default function AddRecordModal({ isOpen, onClose, categories, billId }: AddRecordModalProps) {
   const { addTransaction } = useBills()
+  const { user } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     type: "expense" as "income" | "expense",
     date: new Date().toISOString().split("T")[0],
     item: "",
     amount: "",
-    person: "",
     note: "",
     category_id: "",
   })
 
+  // 获取用户的display name
+  const getUserDisplayName = () => {
+    return user?.user_metadata?.display_name || user?.email?.split('@')[0] || "未知用户"
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.item || !formData.amount || !formData.person || !formData.category_id) {
+    if (!formData.item || !formData.amount || !formData.category_id) {
       return
     }
 
@@ -47,7 +53,7 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
       date: formData.date,
       item: formData.item,
       amount: Number.parseFloat(formData.amount),
-      person: formData.person,
+      person: getUserDisplayName(), // 直接存储display name
       note: formData.note || undefined,
       category_id: formData.category_id,
     })
@@ -59,7 +65,6 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
         date: new Date().toISOString().split("T")[0],
         item: "",
         amount: "",
-        person: "",
         note: "",
         category_id: "",
       })
@@ -181,22 +186,6 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
             </div>
           </div>
 
-          {/* 经办人 */}
-          <div className="space-y-2">
-            <Label htmlFor="person" className="flex items-center">
-              <User className="mr-2 h-4 w-4" />
-              经办人
-            </Label>
-            <Input
-              id="person"
-              placeholder="如：张三"
-              value={formData.person}
-              onChange={(e) => setFormData({ ...formData, person: e.target.value })}
-              required
-              disabled={isSubmitting}
-            />
-          </div>
-
           {/* 备注 */}
           <div className="space-y-2">
             <Label htmlFor="note" className="flex items-center">
@@ -213,6 +202,13 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
             />
           </div>
 
+          {/* 经办人显示（只读） */}
+          <div className="space-y-2">
+            <Label className="flex items-center text-sm text-gray-600">
+              经办人: {getUserDisplayName()}
+            </Label>
+          </div>
+
           {/* 提交按钮 */}
           <div className="flex space-x-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={isSubmitting}>
@@ -221,7 +217,7 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
             <Button 
               type="submit" 
               className="flex-1"
-              disabled={isSubmitting || !formData.item || !formData.amount || !formData.person || !formData.category_id}
+              disabled={isSubmitting || !formData.item || !formData.amount || !formData.category_id}
             >
               {isSubmitting ? "添加中..." : "确认添加"}
             </Button>
