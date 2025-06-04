@@ -1,37 +1,55 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useEffect } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Edit3, FileText, MessageSquare } from "lucide-react"
+import { Edit3 } from "lucide-react"
+import type { Bill } from "@/types"
 
 interface EditBillModalProps {
   isOpen: boolean
   onClose: () => void
-  bill: any
-  onConfirm: (billData: any) => void
+  bill: Bill | null
+  onSubmit: (billData: { name: string; description?: string }) => Promise<void>
+  isSubmitting?: boolean
 }
 
-export default function EditBillModal({ isOpen, onClose, bill, onConfirm }: EditBillModalProps) {
+export default function EditBillModal({ isOpen, onClose, bill, onSubmit, isSubmitting = false }: EditBillModalProps) {
   const [formData, setFormData] = useState({
-    name: bill?.name || "",
-    description: bill?.description || "",
+    name: "",
+    description: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (bill) {
+      setFormData({
+        name: bill.name,
+        description: bill.description || "",
+      })
+    }
+  }, [bill])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.name.trim()) return
 
-    onConfirm(formData)
+    await onSubmit({
+      name: formData.name.trim(),
+      description: formData.description.trim() || undefined,
+    })
+  }
+
+  const handleClose = () => {
+    if (!isSubmitting) {
+      onClose()
+    }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center">
@@ -40,44 +58,39 @@ export default function EditBillModal({ isOpen, onClose, bill, onConfirm }: Edit
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name" className="flex items-center">
-              <FileText className="mr-2 h-4 w-4" />
-              账本名称
-            </Label>
+            <Label htmlFor="name">账本名称 *</Label>
             <Input
               id="name"
+              placeholder="例如：个人账本、家庭开支"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className="flex items-center">
-              <MessageSquare className="mr-2 h-4 w-4" />
-              账本描述
-            </Label>
+            <Label htmlFor="description">账本描述</Label>
             <Textarea
               id="description"
-              rows={3}
+              placeholder="简单描述这个账本的用途..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+              disabled={isSubmitting}
             />
           </div>
 
-          <div className="flex space-x-3">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               取消
             </Button>
-            <Button
-              type="submit"
-              className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-            >
-              保存修改
+            <Button type="submit" disabled={!formData.name.trim() || isSubmitting}>
+              {isSubmitting ? "保存中..." : "保存修改"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

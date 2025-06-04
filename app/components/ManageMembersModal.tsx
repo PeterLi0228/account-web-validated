@@ -1,68 +1,190 @@
 "use client"
 
-import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useEffect } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Users, MoreHorizontal, Crown, Edit3, Plus, Eye, UserMinus } from "lucide-react"
-
-interface Member {
-  id: string
-  name: string
-  email: string
-  permission: "owner" | "edit_add" | "add_only" | "view_only"
-  joinedAt: string
-  avatar?: string
-}
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Users, MoreHorizontal, Crown, Edit3, Plus, Eye, UserMinus, Trash2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import type { Bill, BillMember } from "@/types"
 
 interface ManageMembersModalProps {
   isOpen: boolean
   onClose: () => void
-  bill: any
+  bill: Bill | null
+  onRefresh: () => void
 }
 
-// 模拟成员数据
-const mockMembers: Member[] = [
-  {
-    id: "1",
-    name: "我",
-    email: "me@example.com",
-    permission: "owner",
-    joinedAt: "2024-01-01",
-  },
-  {
-    id: "2",
-    name: "张三",
-    email: "zhangsan@example.com",
-    permission: "edit_add",
-    joinedAt: "2024-01-15",
-  },
-  {
-    id: "3",
-    name: "李四",
-    email: "lisi@example.com",
-    permission: "add_only",
-    joinedAt: "2024-02-01",
-  },
-  {
-    id: "4",
-    name: "王五",
-    email: "wangwu@example.com",
-    permission: "view_only",
-    joinedAt: "2024-02-10",
-  },
-]
+interface MemberWithUser extends BillMember {
+  user_email?: string
+  user_display_name?: string
+}
 
-export default function ManageMembersModal({ isOpen, onClose, bill }: ManageMembersModalProps) {
-  const [members, setMembers] = useState(mockMembers)
+export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }: ManageMembersModalProps) {
+  const [members, setMembers] = useState<MemberWithUser[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [newMemberUsername, setNewMemberUsername] = useState("")
+  const [newMemberPermission, setNewMemberPermission] = useState<'edit_add' | 'add_only' | 'view_only'>('view_only')
+  const [isAdding, setIsAdding] = useState(false)
+
+  const fetchMembers = async () => {
+    if (!bill) return
+
+    setIsLoading(true)
+    try {
+      // 获取账本成员
+      const { data: membersData, error: membersError } = await supabase
+        .from('bill_members')
+        .select('*')
+        .eq('bill_id', bill.id)
+
+      if (membersError) {
+        console.error('获取成员失败:', membersError)
+        return
+      }
+
+      // 获取成员的用户信息
+      const membersWithUser: MemberWithUser[] = []
+      for (const member of membersData || []) {
+        const { data: userData, error: userError } = await supabase.auth.admin.getUserById(member.user_id)
+        
+        if (!userError && userData.user) {
+          membersWithUser.push({
+            ...member,
+            user_email: userData.user.email,
+            user_display_name: userData.user.user_metadata?.display_name
+          })
+        } else {
+          membersWithUser.push(member)
+        }
+      }
+
+      setMembers(membersWithUser)
+    } catch (error) {
+      console.error('获取成员失败:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen && bill) {
+      fetchMembers()
+    }
+  }, [isOpen, bill])
+
+  const handleAddMember = async () => {
+    if (!bill || !newMemberUsername.trim()) return
+
+    setIsAdding(true)
+    try {
+      // 构造完整的邮箱地址
+      const emailAddress = `${newMemberUsername.trim()}@gmail.com`
+      
+      // 首先查找用户
+      const { data: userData, error: userError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', emailAddress)
+        .single()
+
+      if (userError || !userData) {
+        alert(`未找到用户名"${newMemberUsername}"对应的用户`)
+        return
+      }
+
+      // 检查是否已经是成员
+      const { data: existingMember } = await supabase
+        .from('bill_members')
+        .select('id')
+        .eq('bill_id', bill.id)
+        .eq('user_id', userData.id)
+        .single()
+
+      if (existingMember) {
+        alert('该用户已经是账本成员')
+        return
+      }
+
+      // 添加成员
+      const { error: addError } = await supabase
+        .from('bill_members')
+        .insert({
+          bill_id: bill.id,
+          user_id: userData.id,
+          permission: newMemberPermission
+        })
+
+      if (addError) {
+        console.error('添加成员失败:', addError)
+        alert('添加成员失败')
+        return
+      }
+
+      setNewMemberUsername("")
+      setNewMemberPermission('view_only')
+      await fetchMembers()
+      onRefresh()
+    } catch (error) {
+      console.error('添加成员失败:', error)
+      alert('添加成员失败')
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (!confirm('确定要移除该成员吗？')) return
+
+    try {
+      const { error } = await supabase
+        .from('bill_members')
+        .delete()
+        .eq('id', memberId)
+
+      if (error) {
+        console.error('移除成员失败:', error)
+        alert('移除成员失败')
+        return
+      }
+
+      await fetchMembers()
+      onRefresh()
+    } catch (error) {
+      console.error('移除成员失败:', error)
+      alert('移除成员失败')
+    }
+  }
+
+  const handleUpdatePermission = async (memberId: string, newPermission: string) => {
+    try {
+      const { error } = await supabase
+        .from('bill_members')
+        .update({ permission: newPermission })
+        .eq('id', memberId)
+
+      if (error) {
+        console.error('更新权限失败:', error)
+        alert('更新权限失败')
+        return
+      }
+
+      await fetchMembers()
+      onRefresh()
+    } catch (error) {
+      console.error('更新权限失败:', error)
+      alert('更新权限失败')
+    }
+  }
 
   const getPermissionIcon = (permission: string) => {
     switch (permission) {
-      case "owner":
-        return <Crown className="h-3 w-3" />
       case "edit_add":
         return <Edit3 className="h-3 w-3" />
       case "add_only":
@@ -76,8 +198,6 @@ export default function ManageMembersModal({ isOpen, onClose, bill }: ManageMemb
 
   const getPermissionText = (permission: string) => {
     switch (permission) {
-      case "owner":
-        return "拥有者"
       case "edit_add":
         return "编辑权限"
       case "add_only":
@@ -85,14 +205,12 @@ export default function ManageMembersModal({ isOpen, onClose, bill }: ManageMemb
       case "view_only":
         return "仅查看"
       default:
-        return "仅查看"
+        return "无权限"
     }
   }
 
   const getPermissionColor = (permission: string) => {
     switch (permission) {
-      case "owner":
-        return "bg-yellow-100 text-yellow-700"
       case "edit_add":
         return "bg-green-100 text-green-700"
       case "add_only":
@@ -100,24 +218,9 @@ export default function ManageMembersModal({ isOpen, onClose, bill }: ManageMemb
       case "view_only":
         return "bg-gray-100 text-gray-700"
       default:
-        return "bg-gray-100 text-gray-700"
+        return "bg-red-100 text-red-700"
     }
   }
-
-  const handlePermissionChange = (memberId: string, newPermission: string) => {
-    setMembers(
-      members.map((member) => (member.id === memberId ? { ...member, permission: newPermission as any } : member)),
-    )
-  }
-
-  const handleRemoveMember = (memberId: string) => {
-    if (confirm("确定要移除这个成员吗？")) {
-      setMembers(members.filter((member) => member.id !== memberId))
-    }
-  }
-
-  const currentUser = members.find((member) => member.permission === "owner")
-  const isOwner = currentUser?.name === "我"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -125,139 +228,146 @@ export default function ManageMembersModal({ isOpen, onClose, bill }: ManageMemb
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <Users className="mr-2 h-5 w-5 text-blue-600" />
-            管理成员：{bill?.name}
+            管理成员 - {bill?.name}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* 成员统计 */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{members.length}</div>
-              <div className="text-sm text-gray-600">总成员</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">
-                {members.filter((m) => m.permission === "owner").length}
+          {/* 添加新成员 */}
+          <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-medium text-gray-900">添加新成员</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-1">
+                <Label htmlFor="username">用户名</Label>
+                <div className="relative">
+                  <Input
+                    id="username"
+                    placeholder="输入用户名"
+                    value={newMemberUsername}
+                    onChange={(e) => setNewMemberUsername(e.target.value)}
+                    disabled={isAdding}
+                    className="pr-20"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                    @gmail.com
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  系统会自动查找 {newMemberUsername}@gmail.com
+                </p>
               </div>
-              <div className="text-sm text-gray-600">拥有者</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {members.filter((m) => m.permission === "edit_add").length}
+              <div>
+                <Label htmlFor="permission">权限</Label>
+                <Select value={newMemberPermission} onValueChange={(value: any) => setNewMemberPermission(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="view_only">仅查看</SelectItem>
+                    <SelectItem value="add_only">仅添加</SelectItem>
+                    <SelectItem value="edit_add">编辑权限</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="text-sm text-gray-600">编辑权限</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">
-                {members.filter((m) => m.permission === "view_only" || m.permission === "add_only").length}
+              <div className="flex items-end">
+                <Button 
+                  onClick={handleAddMember} 
+                  disabled={!newMemberUsername.trim() || isAdding}
+                  className="w-full"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {isAdding ? "添加中..." : "添加"}
+                </Button>
               </div>
-              <div className="text-sm text-gray-600">受限权限</div>
             </div>
           </div>
 
           {/* 成员列表 */}
-          <div className="space-y-3">
-            <h3 className="font-medium">成员列表</h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-gray-900">当前成员</h3>
+              <Badge variant="secondary">{members.length + 1} 人</Badge>
+            </div>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-blue-100 text-blue-600">{member.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
+            {isLoading ? (
+              <div className="text-center py-8 text-gray-500">加载中...</div>
+            ) : (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>成员</TableHead>
+                      <TableHead>权限</TableHead>
+                      <TableHead className="w-20">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {/* 账本拥有者 */}
+                    <TableRow>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Crown className="h-4 w-4 text-yellow-600" />
+                          <span className="font-medium">{bill?.owner || "账本拥有者"}</span>
+                          <Badge variant="outline" className="text-xs">拥有者</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className="bg-yellow-100 text-yellow-700">
+                          <Crown className="h-3 w-3 mr-1" />
+                          拥有者
+                        </Badge>
+                      </TableCell>
+                      <TableCell>-</TableCell>
+                    </TableRow>
 
-                    <div>
-                      <div className="font-medium">{member.name}</div>
-                      <div className="text-sm text-gray-600">{member.email}</div>
-                      <div className="text-xs text-gray-500">加入于 {member.joinedAt}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    {isOwner && member.permission !== "owner" ? (
-                      <Select
-                        value={member.permission}
-                        onValueChange={(value) => handlePermissionChange(member.id, value)}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="edit_add">
-                            <div className="flex items-center">
-                              <Edit3 className="mr-2 h-3 w-3" />
-                              编辑权限
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="add_only">
-                            <div className="flex items-center">
-                              <Plus className="mr-2 h-3 w-3" />
-                              仅添加
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="view_only">
-                            <div className="flex items-center">
-                              <Eye className="mr-2 h-3 w-3" />
-                              仅查看
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge className={`${getPermissionColor(member.permission)}`}>
-                        {getPermissionIcon(member.permission)}
-                        <span className="ml-1">{getPermissionText(member.permission)}</span>
-                      </Badge>
-                    )}
-
-                    {isOwner && member.permission !== "owner" && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
+                    {/* 其他成员 */}
+                    {members.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Users className="h-4 w-4 text-gray-400" />
+                            <span>{member.user_display_name || member.user_email || "未知用户"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Select 
+                            value={member.permission} 
+                            onValueChange={(value) => handleUpdatePermission(member.id, value)}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="view_only">仅查看</SelectItem>
+                              <SelectItem value="add_only">仅添加</SelectItem>
+                              <SelectItem value="edit_add">编辑权限</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveMember(member.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleRemoveMember(member.id)} className="text-red-600">
-                            <UserMinus className="mr-2 h-4 w-4" />
-                            移除成员
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 权限说明 */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h4 className="font-medium text-blue-900 mb-2">💡 权限说明</h4>
-            <div className="text-sm text-blue-700 space-y-1">
-              <div>
-                • <strong>拥有者</strong>：完全控制权限，可以管理成员和删除账本
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
-              <div>
-                • <strong>编辑权限</strong>：可以添加、编辑、删除记录
-              </div>
-              <div>
-                • <strong>仅添加</strong>：只能添加新记录，不能编辑或删除
-              </div>
-              <div>
-                • <strong>仅查看</strong>：只能查看记录和统计信息
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={onClose}>
-              关闭
-            </Button>
+            )}
           </div>
         </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            关闭
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

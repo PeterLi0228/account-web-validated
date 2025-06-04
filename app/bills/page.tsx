@@ -10,18 +10,27 @@ import { BookOpen, Plus, MoreHorizontal, Edit3, Share2, Trash2, Users, Search, E
 import Link from "next/link"
 import AppLayout from "../components/AppLayout"
 import CreateBillModal from "../components/CreateBillModal"
+import EditBillModal from "../components/EditBillModal"
+import ManageMembersModal from "../components/ManageMembersModal"
+import ManageCategoriesModal from "../components/ManageCategoriesModal"
 import { useBills } from "@/contexts/BillContext"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 import type { Bill } from "@/types"
 
 export default function BillsPage() {
   const { user } = useAuth()
-  const { bills, isLoading, createBill } = useBills()
+  const { bills, isLoading, createBill, fetchBills } = useBills()
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showMembersModal, setShowMembersModal] = useState(false)
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false)
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -87,6 +96,76 @@ export default function BillsPage() {
     }
     
     setIsCreating(false)
+  }
+
+  const handleEditBill = (bill: Bill) => {
+    setSelectedBill(bill)
+    setShowEditModal(true)
+  }
+
+  const handleUpdateBill = async (billData: { name: string; description?: string }) => {
+    if (!selectedBill) return
+
+    setIsUpdating(true)
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .update({
+          name: billData.name,
+          description: billData.description
+        })
+        .eq('id', selectedBill.id)
+
+      if (error) {
+        console.error('更新账本失败:', error)
+        alert('更新账本失败')
+        return
+      }
+
+      await fetchBills()
+      setShowEditModal(false)
+      setSelectedBill(null)
+    } catch (error) {
+      console.error('更新账本失败:', error)
+      alert('更新账本失败')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleManageMembers = (bill: Bill) => {
+    setSelectedBill(bill)
+    setShowMembersModal(true)
+  }
+
+  const handleManageCategories = (bill: Bill) => {
+    setSelectedBill(bill)
+    setShowCategoriesModal(true)
+  }
+
+  const handleDeleteBill = async (bill: Bill) => {
+    if (!confirm(`确定要删除账本"${bill.name}"吗？此操作不可撤销，将删除所有相关的交易记录和分类。`)) {
+      return
+    }
+
+    try {
+      // 删除账本（级联删除会自动删除相关的交易记录、分类和成员）
+      const { error } = await supabase
+        .from('bills')
+        .delete()
+        .eq('id', bill.id)
+
+      if (error) {
+        console.error('删除账本失败:', error)
+        alert('删除账本失败')
+        return
+      }
+
+      await fetchBills()
+    } catch (error) {
+      console.error('删除账本失败:', error)
+      alert('删除账本失败')
+    }
   }
 
   if (!user) {
@@ -229,6 +308,9 @@ export default function BillsPage() {
                       <CardTitle className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                         {bill.name}
                       </CardTitle>
+                      {bill.description && (
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{bill.description}</p>
+                      )}
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -237,27 +319,24 @@ export default function BillsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/chat/${bill.id}`}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            查看详情
-                          </Link>
-                        </DropdownMenuItem>
                         {bill.permission === "owner" && (
                           <>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditBill(bill)}>
                               <Edit3 className="mr-2 h-4 w-4" />
                               编辑账本
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleManageMembers(bill)}>
                               <Users className="mr-2 h-4 w-4" />
                               管理成员
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleManageCategories(bill)}>
                               <Tag className="mr-2 h-4 w-4" />
                               管理分类
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => handleDeleteBill(bill)}
+                            >
                               <Trash2 className="mr-2 h-4 w-4" />
                               删除账本
                             </DropdownMenuItem>
@@ -295,11 +374,43 @@ export default function BillsPage() {
         )}
       </div>
 
+      {/* 模态框 */}
       <CreateBillModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateBill}
         isSubmitting={isCreating}
+      />
+
+      <EditBillModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setSelectedBill(null)
+        }}
+        bill={selectedBill}
+        onSubmit={handleUpdateBill}
+        isSubmitting={isUpdating}
+      />
+
+      <ManageMembersModal
+        isOpen={showMembersModal}
+        onClose={() => {
+          setShowMembersModal(false)
+          setSelectedBill(null)
+        }}
+        bill={selectedBill}
+        onRefresh={fetchBills}
+      />
+
+      <ManageCategoriesModal
+        isOpen={showCategoriesModal}
+        onClose={() => {
+          setShowCategoriesModal(false)
+          setSelectedBill(null)
+        }}
+        bill={selectedBill}
+        onRefresh={fetchBills}
       />
     </AppLayout>
   )

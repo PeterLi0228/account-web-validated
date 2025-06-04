@@ -35,6 +35,7 @@ export interface Bill {
   id: string;
   owner_id: string;
   name: string;
+  description?: string; // 账本描述
   created_at: string;
   permission?: 'owner' | 'edit_add' | 'add_only' | 'view_only'; // 权限，owner表示创建者
   memberCount: number; // 成员数量

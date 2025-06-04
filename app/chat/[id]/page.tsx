@@ -522,7 +522,7 @@ export default function ChatPage() {
               <div>
                 <label className="text-sm font-medium">分类</label>
                 <Select 
-                  value={suggestedRecord.category_id} 
+                  value={suggestedRecord.category_id && suggestedRecord.item ? `${suggestedRecord.category_id}_${suggestedRecord.item}` : ""} 
                   onValueChange={(value) => {
                     // value格式为 "originalId_categoryName"
                     const [originalId, categoryName] = value.split('_')
@@ -644,7 +644,7 @@ export default function ChatPage() {
               <div>
                 <label className="text-sm font-medium">分类</label>
                 <Select 
-                  value={editingTransaction.category_id || ""} 
+                  value={editingTransaction.category_id && editingTransaction.item ? `${editingTransaction.category_id}_${editingTransaction.item}` : ""} 
                   onValueChange={(value) => {
                     // value格式为 "originalId_categoryName"
                     const [originalId, categoryName] = value.split('_')
