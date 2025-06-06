@@ -375,50 +375,42 @@ export default function BillsPage() {
                         <p className="text-sm text-gray-600 mt-1 line-clamp-2">{bill.description}</p>
                       )}
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {bill.permission === "owner" && (
-                          <>
-                            <DropdownMenuItem onClick={() => handleEditBill(bill)}>
-                              <Edit3 className="mr-2 h-4 w-4" />
-                              编辑账本
+                    {bill.permission === "owner" && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditBill(bill)}>
+                            <Edit3 className="mr-2 h-4 w-4" />
+                            编辑账本
+                          </DropdownMenuItem>
+                          {!bill.is_default && (
+                            <DropdownMenuItem onClick={() => handleSetDefault(bill)}>
+                              <Crown className="mr-2 h-4 w-4" />
+                              设为默认
                             </DropdownMenuItem>
-                            {!bill.is_default && (
-                              <DropdownMenuItem onClick={() => handleSetDefault(bill)}>
-                                <Crown className="mr-2 h-4 w-4" />
-                                设为默认
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => handleManageMembers(bill)}>
-                              <Users className="mr-2 h-4 w-4" />
-                              管理成员
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleManageCategories(bill)}>
-                              <Tag className="mr-2 h-4 w-4" />
-                              管理分类
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleDeleteBill(bill)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              删除账本
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                        {bill.permission !== "owner" && (
+                          )}
+                          <DropdownMenuItem onClick={() => handleManageMembers(bill)}>
+                            <Users className="mr-2 h-4 w-4" />
+                            管理成员
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleManageCategories(bill)}>
                             <Tag className="mr-2 h-4 w-4" />
-                            查看分类
+                            管理分类
                           </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteBill(bill)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            删除账本
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">

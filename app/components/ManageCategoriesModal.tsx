@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Tag, Plus, Trash2, TrendingUp, TrendingDown, Edit3, Check, X } from "lucide-react"
+import { Tag, Plus, Trash2, TrendingUp, TrendingDown, Edit3, Check, X, Lock } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/AuthContext"
 import type { Bill, Category } from "@/types"
 
 interface ManageCategoriesModalProps {
@@ -28,6 +29,7 @@ interface ExpandedCategory {
 }
 
 export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh }: ManageCategoriesModalProps) {
+  const { user } = useAuth()
   const [expandedCategories, setExpandedCategories] = useState<ExpandedCategory[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
@@ -35,6 +37,9 @@ export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh
   const [isAdding, setIsAdding] = useState(false)
   const [editingCategoryId, setEditingCategoryId] = useState<string>("")
   const [editCategoryName, setEditCategoryName] = useState("")
+
+  // 检查是否为账本拥有者
+  const isOwner = user && bill && bill.owner_id === user.id
 
   const fetchCategories = async () => {
     if (!bill) return
@@ -369,6 +374,37 @@ export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh
           </Card>
         ))}
       </div>
+    )
+  }
+
+  // 如果不是拥有者，显示权限不足提示
+  if (!isOwner) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Lock className="mr-2 h-5 w-5 text-amber-600" />
+              权限不足
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-center py-8">
+              <Lock className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">权限不足</h3>
+              <p className="text-gray-500">只有账本拥有者才能查看和管理分类</p>
+              <p className="text-sm text-gray-400 mt-2">请联系账本拥有者进行分类管理</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     )
   }
 

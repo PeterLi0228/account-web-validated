@@ -92,7 +92,7 @@ export default function LoginPage() {
             <Wallet className="h-12 w-12 text-blue-600" />
           </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            简记账
+                          可记账
           </CardTitle>
           <CardDescription>
             简单记录，智慧理财

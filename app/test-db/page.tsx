@@ -484,7 +484,7 @@ export default function TestDatabasePage() {
             </CardHeader>
             <CardContent>
               <div className="text-green-700">
-                <p>所有测试都通过了！您的数据库已正确配置，可以开始使用简记账应用了。</p>
+                <p>所有测试都通过了！您的数据库已正确配置，可以开始使用可记账应用了。</p>
                 <div className="mt-4">
                   <Button asChild>
                     <a href="/">返回首页</a>

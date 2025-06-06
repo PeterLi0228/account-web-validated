@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, TrendingUp, TrendingDown, Wallet, Bot, Filter, BookOpen, Calendar } from "lucide-react"
+import { Plus, TrendingUp, TrendingDown, Wallet, Bot, Filter, BookOpen, Calendar, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,12 +18,13 @@ import { useRouter } from "next/navigation"
 
 export default function HomePage() {
   const { user } = useAuth()
-  const { bills, currentBillId, setCurrentBillId, currentBill, isLoading } = useBills()
+  const { bills, currentBillId, setCurrentBillId, currentBill, isLoading, fetchBills } = useBills()
   const router = useRouter()
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [dateFilter, setDateFilter] = useState("current-month")
   const [customStartDate, setCustomStartDate] = useState("")
   const [customEndDate, setCustomEndDate] = useState("")
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -111,6 +112,17 @@ export default function HomePage() {
     }
   }
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await fetchBills()
+    } catch (error) {
+      console.error('刷新数据失败:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   if (!user) {
     return null
   }
@@ -130,7 +142,7 @@ export default function HomePage() {
       <AppLayout>
         <div className="h-full flex flex-col items-center justify-center p-4 text-center">
           <Wallet className="h-16 w-16 text-gray-400 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">欢迎使用简记账</h2>
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">欢迎使用可记账</h2>
           <p className="text-gray-500 mb-4">
             您还没有创建任何账本，请先创建一个账本开始记账。
           </p>
@@ -311,6 +323,15 @@ export default function HomePage() {
               AI记账
             </Button>
           </Link>
+          <Button 
+            variant="outline" 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex-1 sm:flex-none"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? '刷新中...' : '刷新数据'}
+          </Button>
         </div>
 
         {/* 交易记录表格 */}
@@ -326,6 +347,7 @@ export default function HomePage() {
               transactions={filteredTransactions} 
               canEdit={currentBill?.permission === 'owner' || currentBill?.permission === 'edit_add'}
               categories={currentBill?.categories}
+              currentBill={currentBill || undefined}
             />
           </CardContent>
         </Card>

@@ -10,16 +10,19 @@ import { MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { supabase } from "@/lib/supabase"
 import { useBills } from "@/contexts/BillContext"
-import type { Transaction, Category } from "@/types"
+import { useAuth } from "@/contexts/AuthContext"
+import type { Transaction, Category, Bill } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface TransactionTableProps {
   transactions: Transaction[]
   canEdit?: boolean
   categories?: Category[]
+  currentBill?: Bill
 }
 
-export default function TransactionTable({ transactions, canEdit = false, categories }: TransactionTableProps) {
+export default function TransactionTable({ transactions, canEdit = false, categories, currentBill }: TransactionTableProps) {
+  const { user } = useAuth()
   const { fetchBills } = useBills()
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
@@ -35,6 +38,29 @@ export default function TransactionTable({ transactions, canEdit = false, catego
 
   const formatAmount = (amount: number) => {
     return `¥${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  // 检查是否可以编辑特定交易记录
+  const canEditTransaction = (transaction: Transaction) => {
+    if (!user || !currentBill) return false
+    
+    // 账本拥有者可以编辑所有记录
+    if (currentBill.permission === 'owner') return true
+    
+    // edit_add权限的用户只能编辑自己创建的记录
+    if (currentBill.permission === 'edit_add') {
+      return transaction.user_id === user.id
+    }
+    
+    return false
+  }
+
+  // 检查是否可以删除特定交易记录
+  const canDeleteTransaction = (transaction: Transaction) => {
+    if (!user || !currentBill) return false
+    
+    // 只有账本拥有者可以删除记录
+    return currentBill.permission === 'owner'
   }
 
   const handleEditTransaction = (transaction: Transaction) => {
@@ -143,7 +169,7 @@ export default function TransactionTable({ transactions, canEdit = false, catego
                       {transaction.note || "-"}
                     </p>
                   </TableCell>
-                  {canEdit && (
+                  {canEdit && (canEditTransaction(transaction) || canDeleteTransaction(transaction)) && (
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -152,17 +178,21 @@ export default function TransactionTable({ transactions, canEdit = false, catego
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEditTransaction(transaction)}>
-                      <Edit className="mr-2 h-4 w-4" />
-                      编辑
-                    </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-red-600"
-                            onClick={() => handleDeleteTransaction(transaction.id)}
-                          >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      删除
-                    </DropdownMenuItem>
+                    {canEditTransaction(transaction) && (
+                      <DropdownMenuItem onClick={() => handleEditTransaction(transaction)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        编辑
+                      </DropdownMenuItem>
+                    )}
+                    {canDeleteTransaction(transaction) && (
+                      <DropdownMenuItem 
+                        className="text-red-600"
+                        onClick={() => handleDeleteTransaction(transaction.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        删除
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableCell>

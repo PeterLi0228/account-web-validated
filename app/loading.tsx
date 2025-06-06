@@ -10,7 +10,7 @@ export default function Loading() {
             <Wallet className="h-12 w-12 text-blue-600 animate-pulse" />
           </div>
           <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            简记账
+            可记账
           </h2>
           <p className="text-gray-600 mb-4">正在加载中...</p>
           <div className="flex justify-center">
