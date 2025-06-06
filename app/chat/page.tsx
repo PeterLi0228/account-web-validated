@@ -287,11 +287,18 @@ export default function ChatPage() {
       setShowConfirmModal(false)
       setSuggestedRecord(null)
       
+      // 移除所有消息中的suggestedRecord，以隐藏"确认添加记录"按钮
+      setMessages((prev: Message[]) => prev.map(msg => ({
+        ...msg,
+        suggestedRecord: undefined
+      })))
+      
       const confirmMessage: Message = {
         id: Date.now().toString(),
         type: "ai",
         content: "✅ 记录已成功添加到账本中！",
         timestamp: new Date(),
+        linkedTransactionId: result.data.id, // 关联交易记录ID，用于显示编辑按钮
       }
       setMessages((prev: Message[]) => [...prev, confirmMessage])
 
