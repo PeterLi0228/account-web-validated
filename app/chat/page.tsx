@@ -105,12 +105,12 @@ export default function ChatPage() {
         const historyMessages: Message[] = aiLogs
           .reverse() // 反转顺序，让最新的在底部
           .map((log: any) => ({
-            id: log.id,
-            type: log.role === 'user' ? 'user' : 'ai',
-            content: log.content,
+          id: log.id,
+          type: log.role === 'user' ? 'user' : 'ai',
+          content: log.content,
             timestamp: new Date(log.created_at),
             linkedTransactionId: log.linked_transaction_id
-          }))
+        }))
 
         setMessages(historyMessages)
       } else {
@@ -279,21 +279,21 @@ export default function ChatPage() {
     if (!suggestedRecord || !currentBill || isConfirming) return
 
     setIsConfirming(true)
-    
+
     try {
-      const result = await addTransaction(currentBill.id, suggestedRecord)
-      
+    const result = await addTransaction(currentBill.id, suggestedRecord)
+    
       if (!result.error && result.data) {
-        setShowConfirmModal(false)
-        setSuggestedRecord(null)
-        
-        const confirmMessage: Message = {
-          id: Date.now().toString(),
-          type: "ai",
-          content: "✅ 记录已成功添加到账本中！",
-          timestamp: new Date(),
-        }
-        setMessages((prev: Message[]) => [...prev, confirmMessage])
+      setShowConfirmModal(false)
+      setSuggestedRecord(null)
+      
+      const confirmMessage: Message = {
+        id: Date.now().toString(),
+        type: "ai",
+        content: "✅ 记录已成功添加到账本中！",
+        timestamp: new Date(),
+      }
+      setMessages((prev: Message[]) => [...prev, confirmMessage])
 
         // 保存确认消息到数据库，关联交易记录ID
         const { saveAILogWithTransaction } = await import('@/lib/ai')
@@ -574,8 +574,8 @@ export default function ChatPage() {
           </DialogHeader>
           {suggestedRecord && (
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">类型</label>
+                <div>
+                  <label className="text-sm font-medium">类型</label>
                 <Select 
                   value={suggestedRecord.type} 
                   onValueChange={(value: "income" | "expense") => 
@@ -627,9 +627,9 @@ export default function ChatPage() {
                       ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">金额</label>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">金额</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -712,8 +712,8 @@ export default function ChatPage() {
                   onChange={(e) => setEditingTransaction({ ...editingTransaction, amount: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
                 />
-              </div>
-              <div>
+                </div>
+                <div>
                 <label className="text-sm font-medium">分类</label>
                 <Select 
                   value={editingTransaction.category_id && editingTransaction.item ? `${editingTransaction.category_id}_${editingTransaction.item}` : ""} 
@@ -749,9 +749,9 @@ export default function ChatPage() {
                       ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">日期</label>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">日期</label>
                 <Input
                   type="date"
                   value={editingTransaction.date}
@@ -767,7 +767,7 @@ export default function ChatPage() {
                   disabled
                   className="mt-1 bg-gray-50"
                 />
-              </div>
+                </div>
               <div>
                 <label className="text-sm font-medium">备注</label>
                 <Input

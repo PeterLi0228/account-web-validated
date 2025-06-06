@@ -103,76 +103,76 @@ export default function TransactionTable({ transactions, canEdit = false, catego
 
   return (
     <>
-      <div className="space-y-4">
-        <Table>
-          <TableHeader>
-            <TableRow>
+    <div className="space-y-4">
+      <Table>
+        <TableHeader>
+          <TableRow>
               <TableHead className="w-20">日期</TableHead>
               <TableHead className="w-20">分类</TableHead>
               <TableHead className="text-right w-20">金额</TableHead>
-              <TableHead className="w-16">经办人</TableHead>
+            <TableHead className="w-16">经办人</TableHead>
               <TableHead className="w-32">备注</TableHead>
               {canEdit && <TableHead className="w-10"></TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
             {transactions.map((transaction) => {
               // 由于transaction.item存储的是具体的分类名称，直接使用item作为分类显示
               const categoryName = transaction.item
               
               return (
-                <TableRow key={transaction.id} className="hover:bg-gray-50/50">
-                  <TableCell className="font-medium text-sm">{formatDate(transaction.date)}</TableCell>
+            <TableRow key={transaction.id} className="hover:bg-gray-50/50">
+              <TableCell className="font-medium text-sm">{formatDate(transaction.date)}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">
                       {categoryName || "未分类"}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
+              </TableCell>
+              <TableCell className="text-right">
                     <span className={`font-bold text-sm ${transaction.type === "income" ? "text-green-600" : "text-red-600"}`}>
-                      {transaction.type === "income" ? "+" : "-"}{formatAmount(transaction.amount)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="text-xs">
-                      {transaction.person || "未知"}
-                    </Badge>
-                  </TableCell>
+                  {transaction.type === "income" ? "+" : "-"}{formatAmount(transaction.amount)}
+                </span>
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary" className="text-xs">
+                  {transaction.person || "未知"}
+                </Badge>
+              </TableCell>
                   <TableCell>
                     <p className="text-sm text-gray-600 truncate max-w-32">
                       {transaction.note || "-"}
                     </p>
                   </TableCell>
                   {canEdit && (
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+              <TableCell>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleEditTransaction(transaction)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            编辑
-                          </DropdownMenuItem>
+                      <Edit className="mr-2 h-4 w-4" />
+                      编辑
+                    </DropdownMenuItem>
                           <DropdownMenuItem 
                             className="text-red-600"
                             onClick={() => handleDeleteTransaction(transaction.id)}
                           >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      删除
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
                   )}
-                </TableRow>
+            </TableRow>
               )
             })}
-          </TableBody>
-        </Table>
-      </div>
+        </TableBody>
+      </Table>
+    </div>
 
       {/* 编辑交易记录对话框 */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>

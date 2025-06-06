@@ -72,7 +72,7 @@ export async function saveAILog(billId: string, userId: string, role: 'user' | '
   } catch (error) {
     console.error('保存AI日志失败:', error)
   }
-}
+} 
 
 export async function saveAILogWithTransaction(billId: string, userId: string, role: 'user' | 'assistant', content: string, linkedTransactionId: string) {
   try {

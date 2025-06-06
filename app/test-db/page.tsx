@@ -141,6 +141,212 @@ export default function TestDatabasePage() {
       })
     }
 
+    // 测试8: 拥有的账本查询权限
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data, error } = await supabase
+          .from('bills')
+          .select('*, is_default')
+          .eq('owner_id', user.id)
+        
+        if (error) throw error
+        tests.push({
+          name: '拥有的账本查询',
+          status: 'success',
+          message: `查询成功，找到 ${data?.length || 0} 个拥有的账本`
+        })
+      } else {
+        tests.push({
+          name: '拥有的账本查询',
+          status: 'error',
+          message: '用户未登录'
+        })
+      }
+    } catch (error: any) {
+      tests.push({
+        name: '拥有的账本查询',
+        status: 'error',
+        message: error.message || '查询失败'
+      })
+    }
+
+    // 测试9: 参与的账本查询权限
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data, error } = await supabase
+          .from('bill_members')
+          .select(`
+            permission,
+            bills (*, is_default)
+          `)
+          .eq('user_id', user.id)
+        
+        if (error) throw error
+        
+        // 详细分析结果
+        let message = `查询成功，参与 ${data?.length || 0} 个账本`
+        if (data && data.length > 0) {
+          const details = data.map(item => {
+            const bill = item.bills as any
+            return `${bill?.name || '未知账本'}(权限:${item.permission})`
+          }).join(', ')
+          message += ` - ${details}`
+        }
+        
+        tests.push({
+          name: '参与的账本查询',
+          status: 'success',
+          message: message
+        })
+      } else {
+        tests.push({
+          name: '参与的账本查询',
+          status: 'error',
+          message: '用户未登录'
+        })
+      }
+    } catch (error: any) {
+      tests.push({
+        name: '参与的账本查询',
+        status: 'error',
+        message: error.message || '查询失败'
+      })
+    }
+
+    // 测试11: 直接查询 bill_members 表
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data, error } = await supabase
+          .from('bill_members')
+          .select('*')
+          .eq('user_id', user.id)
+        
+        if (error) throw error
+        
+        let message = `找到 ${data?.length || 0} 条成员记录`
+        if (data && data.length > 0) {
+          const details = data.map(item => `账本ID:${item.bill_id}, 权限:${item.permission}`).join('; ')
+          message += ` - ${details}`
+        }
+        
+        tests.push({
+          name: '直接查询bill_members表',
+          status: 'success',
+          message: message
+        })
+      } else {
+        tests.push({
+          name: '直接查询bill_members表',
+          status: 'error',
+          message: '用户未登录'
+        })
+      }
+    } catch (error: any) {
+      tests.push({
+        name: '直接查询bill_members表',
+        status: 'error',
+        message: error.message || '查询失败'
+      })
+    }
+
+    // 测试12: 模拟完整的 fetchBills 逻辑
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // 完全模拟 BillContext 中的 fetchBills 逻辑
+        const { data: memberBills, error: memberError } = await supabase
+          .from('bill_members')
+          .select(`
+            permission,
+            bills (*, is_default)
+          `)
+          .eq('user_id', user.id)
+
+        if (memberError) throw memberError
+
+        let message = `模拟fetchBills: 查询成功，参与 ${memberBills?.length || 0} 个账本`
+        
+        if (memberBills && memberBills.length > 0) {
+          const details = memberBills.map(member => {
+            const bill = member.bills as any
+            const isOwner = bill?.owner_id === user.id
+            return `${bill?.name || '未知账本'}(${isOwner ? 'owner' : member.permission})`
+          }).join(', ')
+          message += ` - ${details}`
+        }
+        
+        tests.push({
+          name: '模拟完整fetchBills逻辑',
+          status: 'success',
+          message: message
+        })
+      } else {
+        tests.push({
+          name: '模拟完整fetchBills逻辑',
+          status: 'error',
+          message: '用户未登录'
+        })
+      }
+    } catch (error: any) {
+      tests.push({
+        name: '模拟完整fetchBills逻辑',
+        status: 'error',
+        message: error.message || '查询失败'
+      })
+    }
+
+    // 测试10: 创建账本和成员记录权限
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // 创建测试账本
+        const { data: billData, error: billError } = await supabase
+          .from('bills')
+          .insert({
+            owner_id: user.id,
+            name: '权限测试账本_' + Date.now()
+          })
+          .select()
+          .single()
+
+        if (billError) throw billError
+
+        // 为自己添加成员记录
+        const { data: memberData, error: memberError } = await supabase
+          .from('bill_members')
+          .insert({
+            bill_id: billData.id,
+            user_id: user.id,
+            permission: 'edit_add'
+          })
+          .select()
+          .single()
+
+        if (memberError) throw memberError
+
+        tests.push({
+          name: '创建账本和成员记录',
+          status: 'success',
+          message: `成功创建账本 "${billData.name}" 和成员记录`
+        })
+      } else {
+        tests.push({
+          name: '创建账本和成员记录',
+          status: 'error',
+          message: '用户未登录'
+        })
+      }
+    } catch (error: any) {
+      tests.push({
+        name: '创建账本和成员记录',
+        status: 'error',
+        message: error.message || '创建失败'
+      })
+    }
+
     setResults(tests)
     setIsLoading(false)
   }

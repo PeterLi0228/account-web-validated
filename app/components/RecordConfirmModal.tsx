@@ -83,7 +83,7 @@ export default function RecordConfirmModal({
     e.preventDefault()
     if (!formData.category_id || formData.category_id === "uncategorized" || formData.category_id === "" || isSubmitting) {
         if (!isSubmitting) {
-          alert("请选择一个有效的分类。");
+        alert("请选择一个有效的分类。");
         }
         return;
     }

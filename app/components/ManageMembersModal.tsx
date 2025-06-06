@@ -49,18 +49,31 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
         return
       }
 
+      // 过滤掉账本拥有者的成员记录（因为拥有者已经单独显示）
+      const filteredMembersData = (membersData || []).filter(member => member.user_id !== bill.owner_id)
+
       // 获取成员的用户信息
       const membersWithUser: MemberWithUser[] = []
-      for (const member of membersData || []) {
-        const { data: userData, error: userError } = await supabase.auth.admin.getUserById(member.user_id)
-        
-        if (!userError && userData.user) {
-          membersWithUser.push({
-            ...member,
-            user_email: userData.user.email,
-            user_display_name: userData.user.user_metadata?.display_name
-          })
-        } else {
+      for (const member of filteredMembersData) {
+        try {
+          // 使用public_user_profiles表获取用户信息
+          const { data: userData, error: userError } = await supabase
+            .from('public_user_profiles')
+            .select('email, display_name')
+            .eq('id', member.user_id)
+            .single()
+
+          if (!userError && userData) {
+            membersWithUser.push({
+              ...member,
+              user_email: userData.email,
+              user_display_name: userData.display_name
+            })
+          } else {
+            membersWithUser.push(member)
+          }
+        } catch (error) {
+          console.error('获取用户信息失败:', error)
           membersWithUser.push(member)
         }
       }
@@ -85,27 +98,55 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
     setIsAdding(true)
     try {
       // 构造完整的邮箱地址
-      const emailAddress = `${newMemberUsername.trim()}@gmail.com`
+      const emailAddress = `${newMemberUsername.trim()}@like.com`
       
-      // 首先查找用户
+      // 获取当前用户信息
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      if (!currentUser) {
+        alert('请先登录')
+        return
+      }
+
+      // 检查是否是当前用户自己
+      if (currentUser.email === emailAddress) {
+        alert('不能添加自己为账本成员')
+        return
+      }
+
+      // 使用public_user_profiles表查找用户
+      console.log('查找用户:', emailAddress)
       const { data: userData, error: userError } = await supabase
-        .from('profiles')
-        .select('id')
+        .from('public_user_profiles')
+        .select('id, email, display_name')
         .eq('email', emailAddress)
         .single()
 
+      console.log('查找用户结果:', userData, userError)
+
       if (userError || !userData) {
+        console.error('查找用户失败:', userError)
         alert(`未找到用户名"${newMemberUsername}"对应的用户`)
         return
       }
 
+      const targetUserId = userData.id
+      console.log('目标用户ID:', targetUserId)
+
+      // 检查是否试图添加账本拥有者
+      if (targetUserId === bill.owner_id) {
+        alert('不能添加账本拥有者为成员')
+        return
+      }
+
       // 检查是否已经是成员
-      const { data: existingMember } = await supabase
+      const { data: existingMember, error: checkError } = await supabase
         .from('bill_members')
         .select('id')
         .eq('bill_id', bill.id)
-        .eq('user_id', userData.id)
+        .eq('user_id', targetUserId)
         .single()
+
+      console.log('检查现有成员:', existingMember, checkError)
 
       if (existingMember) {
         alert('该用户已经是账本成员')
@@ -113,17 +154,20 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
       }
 
       // 添加成员
+      console.log('添加成员:', { bill_id: bill.id, user_id: targetUserId, permission: newMemberPermission })
       const { error: addError } = await supabase
         .from('bill_members')
         .insert({
           bill_id: bill.id,
-          user_id: userData.id,
+          user_id: targetUserId,
           permission: newMemberPermission
         })
 
+      console.log('添加成员结果:', addError)
+
       if (addError) {
         console.error('添加成员失败:', addError)
-        alert('添加成员失败')
+        alert(`添加成员失败: ${addError.message}`)
         return
       }
 
@@ -239,22 +283,13 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-1">
                 <Label htmlFor="username">用户名</Label>
-                <div className="relative">
-                  <Input
-                    id="username"
-                    placeholder="输入用户名"
-                    value={newMemberUsername}
-                    onChange={(e) => setNewMemberUsername(e.target.value)}
-                    disabled={isAdding}
-                    className="pr-20"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                    @gmail.com
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  系统会自动查找 {newMemberUsername}@gmail.com
-                </p>
+                <Input
+                  id="username"
+                  placeholder="输入用户名"
+                  value={newMemberUsername}
+                  onChange={(e) => setNewMemberUsername(e.target.value)}
+                  disabled={isAdding}
+                />
               </div>
               <div>
                 <Label htmlFor="permission">权限</Label>
@@ -287,7 +322,7 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
             <div className="flex items-center justify-between">
               <h3 className="font-medium text-gray-900">当前成员</h3>
               <Badge variant="secondary">{members.length + 1} 人</Badge>
-            </div>
+                  </div>
 
             {isLoading ? (
               <div className="text-center py-8 text-gray-500">加载中...</div>
@@ -330,19 +365,19 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Select 
-                            value={member.permission} 
+                      <Select
+                        value={member.permission}
                             onValueChange={(value) => handleUpdatePermission(member.id, value)}
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
                               <SelectItem value="view_only">仅查看</SelectItem>
                               <SelectItem value="add_only">仅添加</SelectItem>
                               <SelectItem value="edit_add">编辑权限</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        </SelectContent>
+                      </Select>
                         </TableCell>
                         <TableCell>
                           <Button
@@ -355,18 +390,18 @@ export default function ManageMembersModal({ isOpen, onClose, bill, onRefresh }:
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+              ))}
                   </TableBody>
                 </Table>
               </div>
             )}
+            </div>
           </div>
-        </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            关闭
-          </Button>
+            <Button variant="outline" onClick={onClose}>
+              关闭
+            </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

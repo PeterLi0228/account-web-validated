@@ -170,8 +170,8 @@ export default function AddRecordModal({ isOpen, onClose, categories, billId }: 
                   .map((categoryOption) => (
                     <SelectItem key={categoryOption.id} value={categoryOption.id}>
                       {categoryOption.name}
-                    </SelectItem>
-                  ))}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

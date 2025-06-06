@@ -31,7 +31,7 @@ export default function HomePage() {
       return
     }
 
-    // 只有在加载完成且确实没有账本时才跳转到账本管理页面
+    // 只有在加载完成且确实没有任何账本（包括共享账本）时才跳转到账本管理页面
     if (!isLoading && bills.length === 0) {
       router.push('/bills')
       return
@@ -214,28 +214,28 @@ export default function HomePage() {
                   </SelectContent>
                 </Select>
 
-                {dateFilter === "custom" && (
+              {dateFilter === "custom" && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="start-date" className="text-sm">开始日期</Label>
-                      <Input
-                        id="start-date"
-                        type="date"
-                        value={customStartDate}
-                        onChange={(e) => setCustomStartDate(e.target.value)}
-                      />
-                    </div>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                    />
+                  </div>
                     <div>
                       <Label htmlFor="end-date" className="text-sm">结束日期</Label>
-                      <Input
-                        id="end-date"
-                        type="date"
-                        value={customEndDate}
-                        onChange={(e) => setCustomEndDate(e.target.value)}
-                      />
-                    </div>
+                    <Input
+                      id="end-date"
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                    />
                   </div>
-                )}
+                  </div>
+              )}
               </div>
             </div>
           </CardContent>

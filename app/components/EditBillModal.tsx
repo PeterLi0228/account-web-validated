@@ -28,7 +28,7 @@ export default function EditBillModal({ isOpen, onClose, bill, onSubmit, isSubmi
       setFormData({
         name: bill.name,
         description: bill.description || "",
-      })
+  })
     }
   }, [bill])
 

@@ -424,10 +424,10 @@ export default function BillsPage() {
                 <CardContent className="pt-0">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-2">
-                      <Badge className={`text-xs ${getPermissionColor(bill.permission)}`}>
-                        {getPermissionIcon(bill.permission)}
-                        <span className="ml-1">{getPermissionText(bill.permission)}</span>
-                      </Badge>
+                    <Badge className={`text-xs ${getPermissionColor(bill.permission)}`}>
+                      {getPermissionIcon(bill.permission)}
+                      <span className="ml-1">{getPermissionText(bill.permission)}</span>
+                    </Badge>
                       {bill.is_default && (
                         <Badge className="text-xs bg-orange-100 text-orange-700">
                           默认

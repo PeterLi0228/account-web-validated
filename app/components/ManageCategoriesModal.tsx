@@ -151,7 +151,7 @@ export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh
         }
       }
 
-      setNewCategoryName("")
+    setNewCategoryName("")
       await fetchCategories()
       onRefresh()
     } catch (error) {
@@ -396,11 +396,11 @@ export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh
             </TabsList>
 
             <TabsContent value="expense" className="space-y-4">
-              {/* 添加新分类 */}
+          {/* 添加新分类 */}
               <div className="flex space-x-2">
-                <Input
+                  <Input
                   placeholder="输入新的支出分类名称"
-                  value={newCategoryName}
+                    value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   disabled={isAdding}
                   onKeyPress={(e) => {
@@ -415,10 +415,10 @@ export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   {isAdding ? "添加中..." : "添加"}
-                </Button>
+                  </Button>
               </div>
 
-              {/* 分类列表 */}
+          {/* 分类列表 */}
               {isLoading ? (
                 <div className="text-center py-8 text-gray-500">加载中...</div>
               ) : (
@@ -440,21 +440,21 @@ export default function ManageCategoriesModal({ isOpen, onClose, bill, onRefresh
                     }
                   }}
                 />
-                <Button 
+                      <Button
                   onClick={handleAddCategory} 
                   disabled={!newCategoryName.trim() || isAdding}
-                >
+                      >
                   <Plus className="mr-2 h-4 w-4" />
                   {isAdding ? "添加中..." : "添加"}
-                </Button>
-              </div>
+                      </Button>
+            </div>
 
               {/* 分类列表 */}
               {isLoading ? (
                 <div className="text-center py-8 text-gray-500">加载中...</div>
               ) : (
                 renderCategoryList("income")
-              )}
+                      )}
             </TabsContent>
           </Tabs>
 

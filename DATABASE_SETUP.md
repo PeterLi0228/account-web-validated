@@ -74,6 +74,24 @@ CREATE POLICY "账本拥有者可以管理成员" ON bill_members
     FOR ALL USING (
         auth.uid() IN (SELECT owner_id FROM bills WHERE id = bill_id)
     );
+
+-- 添加专门的 INSERT 策略，允许账本拥有者为自己或其他用户添加成员记录
+CREATE POLICY "账本拥有者可以添加成员" ON bill_members
+    FOR INSERT WITH CHECK (
+        auth.uid() IN (SELECT owner_id FROM bills WHERE id = bill_id)
+    );
+
+-- 添加专门的 UPDATE 策略
+CREATE POLICY "账本拥有者可以更新成员权限" ON bill_members
+    FOR UPDATE USING (
+        auth.uid() IN (SELECT owner_id FROM bills WHERE id = bill_id)
+    );
+
+-- 添加专门的 DELETE 策略
+CREATE POLICY "账本拥有者可以删除成员" ON bill_members
+    FOR DELETE USING (
+        auth.uid() IN (SELECT owner_id FROM bills WHERE id = bill_id)
+    );
 ```
 
 ### 3. 创建分类表 (categories)
@@ -216,67 +234,83 @@ CREATE TABLE ai_logs (
 
 -- 创建索引
 CREATE INDEX idx_ai_logs_bill_id ON ai_logs(bill_id);
+CREATE INDEX idx_ai_logs_user_id ON ai_logs(user_id);
 CREATE INDEX idx_ai_logs_created_at ON ai_logs(created_at);
 
 -- 启用 RLS
 ALTER TABLE ai_logs ENABLE ROW LEVEL SECURITY;
 
 -- 创建 RLS 策略
-CREATE POLICY "用户可以查看自己的AI聊天记录" ON ai_logs
-    FOR SELECT USING (
-        auth.uid() = user_id OR
-        auth.uid() IN (
-            SELECT owner_id FROM bills WHERE id = bill_id
-            UNION
-            SELECT user_id FROM bill_members WHERE bill_id = ai_logs.bill_id
-        )
-    );
+CREATE POLICY "用户可以查看自己的AI日志" ON ai_logs
+    FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "用户可以创建AI聊天记录" ON ai_logs
+CREATE POLICY "用户可以在自己参与的账本中创建AI日志" ON ai_logs
     FOR INSERT WITH CHECK (
-        auth.uid() = user_id AND
-        auth.uid() IN (
-            SELECT owner_id FROM bills WHERE id = bill_id
-            UNION
-            SELECT user_id FROM bill_members WHERE bill_id = ai_logs.bill_id
+        auth.uid() = user_id AND (
+            EXISTS (
+                SELECT 1 FROM bills WHERE bills.id = ai_logs.bill_id AND bills.owner_id = auth.uid()
+            ) OR
+            EXISTS (
+                SELECT 1 FROM bill_members WHERE bill_members.bill_id = ai_logs.bill_id AND bill_members.user_id = auth.uid()
+            )
         )
     );
 ```
 
+### 7. 创建公开用户信息表 (public_user_profiles)
+
+```sql
+-- 创建公开用户信息表，只暴露非敏感信息
+CREATE TABLE IF NOT EXISTS public_user_profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    display_name TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 创建索引
+CREATE INDEX idx_public_user_profiles_email ON public_user_profiles(email);
+CREATE INDEX idx_public_user_profiles_display_name ON public_user_profiles(display_name);
+
+-- 启用 RLS
+ALTER TABLE public_user_profiles ENABLE ROW LEVEL SECURITY;
+
+-- 创建 RLS 策略 - 所有认证用户都可以查看公开信息
+CREATE POLICY "认证用户可以查看公开用户信息" ON public_user_profiles
+    FOR SELECT USING (auth.role() = 'authenticated');
+
+-- 用户可以插入自己的信息（注册时）
+CREATE POLICY "用户可以插入自己的公开信息" ON public_user_profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- 用户只能更新自己的信息
+CREATE POLICY "用户可以更新自己的公开信息" ON public_user_profiles
+    FOR UPDATE USING (auth.uid() = id);
+```
+
+### 8. 创建查找用户的RPC函数（使用公开信息表）
+
+```sql
+-- 创建查找用户的RPC函数（使用公开信息表）
+CREATE OR REPLACE FUNCTION find_user_by_email(email_param TEXT)
+RETURNS TABLE(id UUID, email TEXT, display_name TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        pup.id,
+        pup.email,
+        pup.display_name
+    FROM public_user_profiles pup
+    WHERE pup.email = email_param;
+END;
+$$;
+
+-- 授予执行权限
+GRANT EXECUTE ON FUNCTION find_user_by_email(TEXT) TO authenticated;
+```
+
 ## 验证设置
-
-执行完所有SQL语句后，您可以在 Supabase 的表编辑器中验证以下内容：
-
-1. **表结构**：确认所有5个表都已创建
-2. **RLS策略**：每个表都应该有相应的安全策略
-3. **索引**：确认所有索引都已创建
-
-## 测试连接
-
-您可以使用项目中的测试页面来验证数据库连接：
-
-1. 启动开发服务器：`npm run dev`
-2. 访问：`http://localhost:3001/test-db`
-3. 点击"开始测试"按钮
-4. 查看测试结果
-
-## 常见问题
-
-### Q: 创建表时出现权限错误
-A: 确保您使用的是项目的服务角色密钥，而不是匿名密钥。
-
-### Q: RLS策略不生效
-A: 确保已启用RLS (`ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;`)
-
-### Q: 无法插入数据
-A: 检查RLS策略是否正确配置，确保用户有相应的权限。
-
-## 下一步
-
-数据库设置完成后，您就可以：
-
-1. 注册新用户账户
-2. 创建第一个账本
-3. 开始使用所有功能
-
-如有问题，请检查 Supabase 控制台的日志部分获取详细错误信息。 
