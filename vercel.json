@@ -3,7 +3,6 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "regions": ["hkg1", "sin1"],
   "functions": {
     "app/**/*.js": {
       "maxDuration": 30
