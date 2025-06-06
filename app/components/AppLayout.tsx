@@ -256,7 +256,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         )}
 
         {/* 页面内容 */}
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
 
       {/* 修改用户名对话框 */}

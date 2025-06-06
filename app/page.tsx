@@ -154,7 +154,7 @@ export default function HomePage() {
 
   return (
     <AppLayout>
-      <div className="p-4 lg:p-8 space-y-6">
+      <div className="p-4 lg:p-8 space-y-6 pb-8">
         {/* 筛选器 */}
         <Card className="shadow-sm">
           <CardHeader>
