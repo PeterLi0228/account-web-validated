@@ -149,39 +149,7 @@ export default function ChatPage() {
 
   const canEdit = currentBill?.permission === "owner" || currentBill?.permission === "edit_add" || currentBill?.permission === "add_only"
 
-  const parseUserInput = useCallback((input: string): TransactionData | null => {
-    const amountMatch = input.match(/(\d+(?:\.\d{1,2})?)/);
-    if (!amountMatch) return null;
 
-    const amount = parseFloat(amountMatch[1]);
-    const isIncome = /收入|赚|工资|奖金|红包|转账收到/.test(input);
-    const type = isIncome ? "income" : "expense";
-
-    // 简单的项目识别
-    let item = "其他";
-    if (/餐|饭|吃|食/.test(input)) item = "餐饮";
-    else if (/交通|车|地铁|公交|打车|油费/.test(input)) item = "交通";
-    else if (/购物|买|商场|超市/.test(input)) item = "购物";
-    else if (/娱乐|电影|游戏|KTV/.test(input)) item = "娱乐";
-    else if (/工资|薪水/.test(input)) item = "工资收入";
-
-    // 找到对应的分类ID
-    const category = currentBill?.categories.find(cat => 
-      cat.type === type && cat.name.includes(item)
-    ) || currentBill?.categories.find(cat => 
-      cat.type === type && cat.name.includes(type === "income" ? "其他收入" : "其他支出")
-    );
-
-    return {
-      type,
-      date: new Date().toISOString().split('T')[0],
-      item,
-      amount,
-      person: user?.user_metadata?.display_name || "我",
-      note: "",
-      category_id: category?.original_id || category?.id || ""
-    };
-  }, [currentBill, user]);
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !canEdit || !currentBill || !user) return
@@ -216,21 +184,54 @@ export default function ChatPage() {
       const aiResponse = await sendChatMessage([
         ...chatHistory,
         { role: 'user', content: currentInput }
-      ])
+      ], currentBill?.categories)
 
       // 移除处理中消息
       setMessages((prev: Message[]) => prev.filter(m => m.id !== "ai-processing"));
 
       if (aiResponse.success) {
-        // 尝试解析用户输入
-        const parsedRecord = parseUserInput(currentInput)
-
         let aiContent = aiResponse.message
         let suggestedRecord: TransactionData | undefined = undefined
 
-        if (parsedRecord && parsedRecord.amount > 0) {
-          aiContent = `我帮你整理了一条${parsedRecord.type === "income" ? "收入" : "支出"}记录，请确认 👇`
-          suggestedRecord = parsedRecord
+        // 尝试解析AI返回的JSON格式
+        try {
+          const jsonMatch = aiResponse.message.match(/```json\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            const jsonData = JSON.parse(jsonMatch[1]);
+            if (jsonData.type && jsonData.amount && jsonData.amount > 0) {
+              // 找到对应的分类ID
+              let category = null;
+              
+              // 首先尝试根据AI推荐的分类名称匹配
+              if (jsonData.category) {
+                category = currentBill?.categories.find(cat => 
+                  cat.type === jsonData.type && 
+                  cat.name.split(';').some(catName => 
+                    catName.trim().includes(jsonData.category) || 
+                    jsonData.category.includes(catName.trim())
+                  )
+                );
+              }
+
+              // 如果找到分类，使用分类中的第一个名称作为item
+              // 如果没找到分类，item为空，让用户手动选择分类
+              const item = category ? category.name.split(';')[0].trim() : "";
+
+              suggestedRecord = {
+                type: jsonData.type,
+                date: new Date().toISOString().split('T')[0],
+                item: item,
+                amount: jsonData.amount,
+                person: user?.user_metadata?.display_name || "我",
+                note: jsonData.description || "", // 具体描述作为备注
+                category_id: category?.original_id || category?.id || ""
+              };
+
+              aiContent = jsonData.message || `我帮你整理了一条${jsonData.type === "income" ? "收入" : "支出"}记录，请确认 👇`;
+            }
+          }
+        } catch (error) {
+          console.log('AI返回的不是JSON格式，使用原始回复');
         }
 
         const aiMessage: Message = {
@@ -601,7 +602,7 @@ export default function ChatPage() {
               <div>
                 <label className="text-sm font-medium">分类</label>
                 <Select 
-                  value={suggestedRecord.category_id && suggestedRecord.item ? `${suggestedRecord.category_id}_${suggestedRecord.item}` : ""} 
+                  value={suggestedRecord.category_id ? `${suggestedRecord.category_id}_${suggestedRecord.item}` : ""} 
                   onValueChange={(value) => {
                     // value格式为 "originalId_categoryName"
                     const [originalId, categoryName] = value.split('_')
