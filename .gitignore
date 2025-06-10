@@ -9,14 +9,37 @@
 # next.js
 /.next/
 /out/
+.next/
 
 # local env files
 .env*.local
 .env.local
+.env.production
 
 # deployment guides with sensitive info
 DEPLOYMENT_GUIDE.md
+DEPLOYMENT_SECURITY.md
+SEALOS_DEPLOYMENT_GUIDE.md
 deployment-*.md
+
+# Docker and Kubernetes files with potential secrets
+docker-compose.override.yml
+k8s-secrets.yaml
+sealos-secrets.yaml
+
+# Docker files with API keys
+Dockerfile.simple
+Dockerfile.production
+
+# Build and deployment scripts with potential secrets
+push-to-*.sh
+login-*.sh
+deploy-*.sh
+*-secrets.*
+
+# Configuration files with API keys
+config/production.json
+config/secrets.json
 
 # misc
 .DS_Store

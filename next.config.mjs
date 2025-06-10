@@ -9,6 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // 支持 Sealos 部署的配置
+  output: 'standalone',
 }
 
 export default nextConfig

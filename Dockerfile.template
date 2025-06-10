@@ -1,0 +1,29 @@
+# 明确使用 linux/amd64 平台
+FROM --platform=linux/amd64 node:18-alpine
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制 package.json
+COPY package.json package-lock.json ./
+
+# 安装所有依赖（包括开发依赖，构建需要）
+RUN npm ci
+
+# 复制源代码
+COPY . .
+
+# 设置环境变量（使用占位符，实际部署时需要替换）
+ENV NODE_ENV=production
+ENV NEXT_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY
+
+# 构建应用
+RUN npm run build
+
+# 暴露端口
+EXPOSE 3000
+
+# 启动命令
+CMD ["npm", "start"] 
