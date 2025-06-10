@@ -217,9 +217,14 @@ export default function ChatPage() {
               // 如果没找到分类，item为空，让用户手动选择分类
               const item = category ? category.name.split(';')[0].trim() : "";
 
+              // 验证AI返回的日期
+              const validatedDate = jsonData.date ? 
+                (await import('@/lib/dateUtils')).validateAIDate(jsonData.date) :
+                new Date().toISOString().split('T')[0];
+
               suggestedRecord = {
                 type: jsonData.type,
-                date: new Date().toISOString().split('T')[0],
+                date: validatedDate,
                 item: item,
                 amount: jsonData.amount,
                 person: user?.user_metadata?.display_name || "我",
