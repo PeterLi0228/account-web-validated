@@ -1,0 +1,20 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圆形 -->
+  <circle cx="256" cy="256" r="256" fill="#3b82f6"/>
+  
+  <!-- 内圆背景 -->
+  <circle cx="256" cy="256" r="200" fill="#ffffff"/>
+  
+  <!-- 账本图标 -->
+  <rect x="180" y="140" width="152" height="200" rx="8" fill="#3b82f6"/>
+  <rect x="200" y="160" width="112" height="8" rx="4" fill="#ffffff"/>
+  <rect x="200" y="180" width="92" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="200" y="200" width="112" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="200" y="220" width="72" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="200" y="240" width="92" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="200" y="260" width="82" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="200" y="280" width="102" height="6" rx="3" fill="#dbeafe"/>
+  
+  <!-- 中文字"记" -->
+  <text x="256" y="380" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#3b82f6">记</text>
+</svg> 

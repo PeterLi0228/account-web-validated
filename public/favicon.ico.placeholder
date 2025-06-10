@@ -1,0 +1,10 @@
+# favicon.ico 占位符
+
+这个文件应该被替换为真实的 .ico 格式图标文件。
+
+你可以：
+1. 使用 generate-icons.html 生成PNG图标
+2. 访问 https://favicon.io/ 将PNG转换为ICO格式
+3. 将生成的favicon.ico文件放在public目录下
+
+或者直接将icon.svg复制为favicon.ico作为临时解决方案。 

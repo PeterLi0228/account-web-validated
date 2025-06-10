@@ -13,6 +13,30 @@ export const metadata: Metadata = {
   description: "一个简洁优雅的记账应用，帮助您轻松管理收支，实现财务自由",
   generator: "v0.dev",
   keywords: "记账,理财,收支管理,财务管理",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" }
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180" }
+    ]
+  },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false
+  },
+  themeColor: "#3b82f6",
+  applicationName: "可记账",
+  appleWebApp: {
+    capable: true,
+    title: "可记账",
+    statusBarStyle: "default"
+  }
 }
 
 export default function RootLayout({
@@ -22,6 +46,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#3b82f6" />
+        <meta name="application-name" content="可记账" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="可记账" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      </head>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
